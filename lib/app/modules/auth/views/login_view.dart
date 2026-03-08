@@ -17,12 +17,16 @@ class LoginView extends StatelessWidget {
         children: <Widget>[
           const _LoginBackground(),
           SafeArea(
-            child: Center(
-              child: LayoutBuilder(
-                builder: (BuildContext context, BoxConstraints constraints) {
-                  final bool compact = constraints.maxWidth < 980;
+            child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                final bool isMobile = constraints.maxWidth < 700;
+                if (isMobile) {
+                  return _MobileLoginPanel(controller: controller);
+                }
 
-                  return ConstrainedBox(
+                final bool compact = constraints.maxWidth < 980;
+                return Center(
+                  child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 1120),
                     child: Container(
                       margin: const EdgeInsets.all(AppSpacing.lg),
@@ -50,10 +54,123 @@ class LoginView extends StatelessWidget {
                               ],
                             ),
                     ),
-                  );
-                },
-              ),
+                  ),
+                );
+              },
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MobileLoginPanel extends StatelessWidget {
+  const _MobileLoginPanel({required this.controller});
+
+  final LoginController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const SizedBox(height: AppSpacing.lg),
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: <Color>[Color(0xFF1E4ED8), Color(0xFF2F5DFF)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.school_rounded, color: Colors.white, size: 28),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            'Teacher Sign In',
+            style: Theme.of(
+              context,
+            ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Login to mark today\'s attendance.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.surface.withValues(alpha: 0.98),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border),
+              boxShadow: const <BoxShadow>[
+                BoxShadow(
+                  color: Color(0x120F172A),
+                  blurRadius: 24,
+                  offset: Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Column(
+              children: <Widget>[
+                TextField(
+                  controller: controller.emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email Address',
+                    hintText: 'teacher@academia.com',
+                    prefixIcon: Icon(Icons.mail_outline_rounded),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                TextField(
+                  controller: controller.passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    hintText: 'Enter your password',
+                    prefixIcon: Icon(Icons.lock_outline_rounded),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                SizedBox(
+                  width: double.infinity,
+                  child: Obx(() {
+                    return FilledButton.icon(
+                      onPressed: controller.isLoading.value
+                          ? null
+                          : controller.login,
+                      icon: Icon(
+                        controller.isLoading.value
+                            ? Icons.hourglass_top_rounded
+                            : Icons.login_rounded,
+                      ),
+                      label: Text(
+                        controller.isLoading.value
+                            ? 'Signing In...'
+                            : 'Continue',
+                      ),
+                    );
+                  }),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            'Only approved teacher accounts can access attendance on mobile.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
           ),
         ],
       ),

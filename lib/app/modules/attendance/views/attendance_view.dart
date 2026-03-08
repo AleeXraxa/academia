@@ -1,9 +1,12 @@
 import 'package:academia/app/modules/attendance/controllers/attendance_controller.dart';
+import 'package:academia/app/core/enums/user_role.dart';
+import 'package:academia/app/routes/app_pages.dart';
 import 'package:academia/app/routes/app_routes.dart';
 import 'package:academia/app/theme/app_colors.dart';
 import 'package:academia/app/theme/app_spacing.dart';
 import 'package:academia/app/widgets/common/app_page_scaffold.dart';
 import 'package:academia/app/widgets/layout/app_shell.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -13,6 +16,85 @@ class AttendanceView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AttendanceController controller = Get.put(AttendanceController());
+    final bool isTeacher = AppPages.activeRole == UserRole.teacher;
+    final bool isMobile = MediaQuery.of(context).size.width < 900;
+
+    if (isMobile) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: const Text('Attendance'),
+          centerTitle: false,
+          elevation: 0,
+          backgroundColor: AppColors.surface,
+          foregroundColor: AppColors.textPrimary,
+          actions: isTeacher
+              ? <Widget>[
+                  IconButton(
+                    tooltip: 'Logout',
+                    onPressed: () async {
+                      await FirebaseAuth.instance.signOut();
+                      if (Get.isRegistered<AttendanceController>()) {
+                        Get.delete<AttendanceController>();
+                      }
+                      AppPages.setActiveRole(UserRole.staff);
+                      Get.offAllNamed(AppRoutes.login);
+                    },
+                    icon: const Icon(Icons.logout_rounded),
+                  ),
+                ]
+              : null,
+        ),
+        body: SafeArea(
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: <Color>[Color(0xFFF7FAFF), Color(0xFFF2F6FD)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+            child: Stack(
+              children: <Widget>[
+                Positioned(
+                  top: -40,
+                  right: -30,
+                  child: Container(
+                    width: 140,
+                    height: 140,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0x142F5DFF),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: -50,
+                  left: -20,
+                  child: Container(
+                    width: 160,
+                    height: 160,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0x101E4ED8),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: _attendanceBody(
+                    context,
+                    controller,
+                    isMobile: true,
+                    isTeacher: isTeacher,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return AppShell(
       currentRoute: AppRoutes.attendance,
@@ -20,51 +102,91 @@ class AttendanceView extends StatelessWidget {
         title: 'Attendance',
         subtitle:
             'Admin attendance session setup for today with batch-level present count.',
-        child: Obx(() {
-          if (controller.isLoading.value) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (controller.errorText.value.isNotEmpty) {
-            return Center(
-              child: Text(
-                controller.errorText.value,
-                style: const TextStyle(color: AppColors.error),
-              ),
-            );
-          }
-
-          return Column(
-            children: <Widget>[
-              _topSummaryCard(controller),
-              const SizedBox(height: AppSpacing.md),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOutCubic,
-                child: controller.showMarkForm.value
-                    ? _markForm(context, controller)
-                    : const SizedBox.shrink(),
-              ),
-              if (!controller.showMarkForm.value) ...<Widget>[
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: FilledButton.icon(
-                    onPressed: controller.openMarkForm,
-                    icon: const Icon(Icons.add_task_rounded),
-                    label: const Text('Mark Attendance For Today'),
-                  ),
-                ),
-              ],
-              const SizedBox(height: AppSpacing.md),
-              Expanded(child: _todaySessionsTable(controller)),
-            ],
-          );
-        }),
+        child: _attendanceBody(
+          context,
+          controller,
+          isMobile: false,
+          isTeacher: isTeacher,
+        ),
       ),
     );
   }
 
-  Widget _topSummaryCard(AttendanceController controller) {
+  Widget _attendanceBody(
+    BuildContext context,
+    AttendanceController controller, {
+    required bool isMobile,
+    required bool isTeacher,
+  }) {
+    return Obx(() {
+      if (controller.isLoading.value) {
+        return const Center(child: CircularProgressIndicator());
+      }
+
+      if (controller.errorText.value.isNotEmpty) {
+        return Center(
+          child: Text(
+            controller.errorText.value,
+            style: const TextStyle(color: AppColors.error),
+          ),
+        );
+      }
+
+      return Column(
+        children: <Widget>[
+          _topSummaryCard(controller, isMobile: isMobile),
+          if (!isTeacher) ...<Widget>[
+            const SizedBox(height: AppSpacing.md),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              child: controller.showMarkForm.value
+                  ? _markForm(context, controller, isMobile: isMobile)
+                  : const SizedBox.shrink(),
+            ),
+            if (!controller.showMarkForm.value) ...<Widget>[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.icon(
+                  onPressed: controller.openMarkForm,
+                  icon: const Icon(Icons.add_task_rounded),
+                  label: Text(
+                    isMobile ? 'Mark Attendance' : 'Mark Attendance For Today',
+                  ),
+                ),
+              ),
+            ],
+          ],
+          const SizedBox(height: AppSpacing.md),
+          Expanded(
+            child: _todaySessionsTable(
+              context,
+              controller,
+              isMobile: isMobile,
+              isTeacher: isTeacher,
+            ),
+          ),
+        ],
+      );
+    });
+  }
+
+  Widget _topSummaryCard(
+    AttendanceController controller, {
+    required bool isMobile,
+  }) {
+    final int totalPresent = controller.todaySessions.fold<int>(
+      0,
+      (int sum, AdminAttendanceSession session) => sum + session.presentCount,
+    );
+    final int totalAbsent = controller.todaySessions.fold<int>(
+      0,
+      (int sum, AdminAttendanceSession session) => sum + session.absentCount,
+    );
+    final int totalLeave = controller.todaySessions.fold<int>(
+      0,
+      (int sum, AdminAttendanceSession session) => sum + session.leaveCount,
+    );
     final String dateLabel = controller.todayLabel;
     return Container(
       width: double.infinity,
@@ -88,56 +210,107 @@ class AttendanceView extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
         children: <Widget>[
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
-            ),
-            child: const Icon(
-              Icons.calendar_today_rounded,
-              color: Colors.white,
-              size: 18,
-            ),
+          Row(
+            children: <Widget>[
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.24),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.calendar_today_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    const Text(
+                      'Today\'s Session Window',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Date: $dateLabel',
+                      style: const TextStyle(
+                        color: Color(0xFFE5ECFF),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Text(
+                  '${controller.todaySessions.length} Sessions',
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          if (isMobile) ...<Widget>[
+            const SizedBox(height: 12),
+            Row(
               children: <Widget>[
-                const Text(
-                  'Today\'s Session Window',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  'Date: $dateLabel',
-                  style: const TextStyle(
-                    color: Color(0xFFE5ECFF),
-                    fontSize: 13,
-                  ),
-                ),
+                Expanded(child: _heroStatTile('Present', '$totalPresent')),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(child: _heroStatTile('Leave', '$totalLeave')),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(child: _heroStatTile('Absent', '$totalAbsent')),
               ],
             ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _heroStatTile(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        children: <Widget>[
+          Text(
+            label,
+            style: const TextStyle(color: Color(0xFFE5ECFF), fontSize: 12),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-            ),
-            child: Text(
-              '${controller.todaySessions.length} Sessions',
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+          const Spacer(),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
             ),
           ),
         ],
@@ -145,7 +318,11 @@ class AttendanceView extends StatelessWidget {
     );
   }
 
-  Widget _markForm(BuildContext context, AttendanceController controller) {
+  Widget _markForm(
+    BuildContext context,
+    AttendanceController controller, {
+    required bool isMobile,
+  }) {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -175,11 +352,10 @@ class AttendanceView extends StatelessWidget {
             style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: AppSpacing.md),
-          Row(
-            children: <Widget>[
-              Expanded(
-                flex: 5,
-                child: DropdownButtonFormField<String>(
+          if (isMobile)
+            Column(
+              children: <Widget>[
+                DropdownButtonFormField<String>(
                   value: controller.selectedBatchId.value.trim().isEmpty
                       ? null
                       : controller.selectedBatchId.value,
@@ -202,11 +378,8 @@ class AttendanceView extends StatelessWidget {
                     controller.updateBatch(value);
                   },
                 ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                flex: 3,
-                child: TextField(
+                const SizedBox(height: AppSpacing.sm),
+                TextField(
                   onChanged: (String value) {
                     controller.presentCountInput.value = value;
                   },
@@ -216,11 +389,9 @@ class AttendanceView extends StatelessWidget {
                     prefixIcon: Icon(Icons.groups_2_rounded),
                   ),
                 ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                flex: 2,
-                child: Container(
+                const SizedBox(height: AppSpacing.sm),
+                Container(
+                  width: double.infinity,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
                     vertical: 12,
@@ -239,9 +410,76 @@ class AttendanceView extends StatelessWidget {
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            )
+          else
+            Row(
+              children: <Widget>[
+                Expanded(
+                  flex: 5,
+                  child: DropdownButtonFormField<String>(
+                    value: controller.selectedBatchId.value.trim().isEmpty
+                        ? null
+                        : controller.selectedBatchId.value,
+                    decoration: const InputDecoration(
+                      labelText: 'Batch',
+                      prefixIcon: Icon(Icons.class_rounded),
+                    ),
+                    items: controller.batches
+                        .map(
+                          (batch) => DropdownMenuItem<String>(
+                            value: batch.id,
+                            child: Text(batch.name),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (String? value) {
+                      if (value == null) {
+                        return;
+                      }
+                      controller.updateBatch(value);
+                    },
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    onChanged: (String value) {
+                      controller.presentCountInput.value = value;
+                    },
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Present Students',
+                      prefixIcon: Icon(Icons.groups_2_rounded),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  flex: 2,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceAlt,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Text(
+                      'Batch Size: ${controller.selectedBatchStudentsCount}',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           const SizedBox(height: AppSpacing.md),
           Row(
             children: <Widget>[
@@ -287,7 +525,12 @@ class AttendanceView extends StatelessWidget {
     );
   }
 
-  Widget _todaySessionsTable(AttendanceController controller) {
+  Widget _todaySessionsTable(
+    BuildContext context,
+    AttendanceController controller, {
+    required bool isMobile,
+    required bool isTeacher,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -331,7 +574,7 @@ class AttendanceView extends StatelessWidget {
               ],
             ),
           ),
-          const _AttendanceSessionHeader(),
+          if (!isMobile) const _AttendanceSessionHeader(),
           Expanded(
             child: Obx(() {
               if (controller.todaySessions.isEmpty) {
@@ -351,6 +594,103 @@ class AttendanceView extends StatelessWidget {
                 itemBuilder: (BuildContext context, int index) {
                   final AdminAttendanceSession item =
                       controller.todaySessions[index];
+                  if (isMobile) {
+                    return TweenAnimationBuilder<double>(
+                      tween: Tween<double>(begin: 0, end: 1),
+                      duration: Duration(milliseconds: 170 + (index * 20)),
+                      curve: Curves.easeOutCubic,
+                      builder: (_, double value, Widget? child) {
+                        return Opacity(
+                          opacity: value,
+                          child: Transform.translate(
+                            offset: Offset(0, (1 - value) * 8),
+                            child: child,
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFCFDFF),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFE5EAF5)),
+                          boxShadow: const <BoxShadow>[
+                            BoxShadow(
+                              color: Color(0x0A0F172A),
+                              blurRadius: 14,
+                              offset: Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Row(
+                              children: <Widget>[
+                                Expanded(
+                                  child: Text(
+                                    item.batchName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                                _statusPill(item.status),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: <Widget>[
+                                _sessionMiniChip(
+                                  'Present',
+                                  '${item.presentCount}',
+                                  const Color(0xFFDCFCE7),
+                                  const Color(0xFF166534),
+                                ),
+                                _sessionMiniChip(
+                                  'Absent',
+                                  '${item.absentCount}',
+                                  const Color(0xFFFEE2E2),
+                                  const Color(0xFF991B1B),
+                                ),
+                                _sessionMiniChip(
+                                  'Leave',
+                                  '${item.leaveCount}',
+                                  const Color(0xFFFFF3DC),
+                                  const Color(0xFF9A3412),
+                                ),
+                                _sessionMiniChip(
+                                  'Total',
+                                  '${item.totalStudents}',
+                                  const Color(0xFFE8EEFF),
+                                  const Color(0xFF1E4ED8),
+                                ),
+                              ],
+                            ),
+                            if (isTeacher &&
+                                _isOpenSession(item.status)) ...<Widget>[
+                              const SizedBox(height: AppSpacing.sm),
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.tonalIcon(
+                                  onPressed: () => _openTeacherMarkDialog(
+                                    context,
+                                    controller,
+                                    item,
+                                  ),
+                                  icon: const Icon(Icons.checklist_rounded),
+                                  label: const Text('Mark Attendance'),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  }
                   return AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
                     padding: const EdgeInsets.symmetric(
@@ -394,13 +734,52 @@ class AttendanceView extends StatelessWidget {
                         Expanded(
                           flex: 2,
                           child: Text(
+                            '${item.leaveCount}',
+                            style: const TextStyle(
+                              color: AppColors.warning,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
                             '${item.totalStudents}',
                             style: const TextStyle(
                               color: AppColors.textSecondary,
                             ),
                           ),
                         ),
-                        Expanded(flex: 2, child: _statusPill(item.status)),
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            '${_attendancePercentage(item).toStringAsFixed(1)}%',
+                            style: const TextStyle(
+                              color: AppColors.accent,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: isTeacher && _isOpenSession(item.status)
+                              ? Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: FilledButton.tonalIcon(
+                                    onPressed: () => _openTeacherMarkDialog(
+                                      context,
+                                      controller,
+                                      item,
+                                    ),
+                                    icon: const Icon(
+                                      Icons.checklist_rounded,
+                                      size: 16,
+                                    ),
+                                    label: const Text('Mark'),
+                                  ),
+                                )
+                              : _statusPill(item.status),
+                        ),
                       ],
                     ),
                   );
@@ -439,6 +818,243 @@ class AttendanceView extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _sessionMiniChip(String label, String value, Color bg, Color fg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: fg.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(
+            '$label: ',
+            style: TextStyle(
+              color: fg.withValues(alpha: 0.8),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: fg,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _isOpenSession(String status) {
+    final String normalized = status.trim().toLowerCase();
+    return normalized == 'open' || normalized == 'active';
+  }
+
+  double _attendancePercentage(AdminAttendanceSession session) {
+    final int total = session.totalStudents;
+    if (total <= 0) {
+      return 0;
+    }
+    final int attended = session.presentCount + session.leaveCount;
+    return (attended / total) * 100;
+  }
+
+  Future<void> _openTeacherMarkDialog(
+    BuildContext context,
+    AttendanceController controller,
+    AdminAttendanceSession session,
+  ) async {
+    final students = await controller.fetchStudentsForBatch(session.batchId);
+    if (students.isEmpty) {
+      await _showErrorDialog(
+        context,
+        'No students found in ${session.batchName} batch.',
+      );
+      return;
+    }
+
+    final Set<String> presentIds = <String>{};
+    final Set<String> leaveIds = <String>{};
+    String warningText = '';
+
+    await _showSaasDialog(
+      context: context,
+      child: StatefulBuilder(
+        builder: (BuildContext context, void Function(void Function()) setState) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              _dialogHeader(
+                icon: Icons.checklist_rounded,
+                title: 'Mark Attendance',
+                subtitle:
+                    '${session.batchName} - Present max ${session.presentCount}',
+                accent: AppColors.accent,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              if (warningText.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF3DC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFF2D7A2)),
+                  ),
+                  child: Text(
+                    warningText,
+                    style: const TextStyle(
+                      color: Color(0xFF9A3412),
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              if (warningText.isNotEmpty) const SizedBox(height: AppSpacing.sm),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 360),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: students.length,
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(height: AppSpacing.xs),
+                  itemBuilder: (BuildContext context, int index) {
+                    final student = students[index];
+                    final bool isPresent = presentIds.contains(student.id);
+                    final bool isLeave = leaveIds.contains(student.id);
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFCFDFF),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFE5EAF5)),
+                      ),
+                      child: Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: Text(
+                              student.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                warningText = '';
+                                if (isPresent) {
+                                  presentIds.remove(student.id);
+                                  return;
+                                }
+                                if (presentIds.length >= session.presentCount) {
+                                  warningText =
+                                      'You can select max ${session.presentCount} students as Present.';
+                                  return;
+                                }
+                                presentIds.add(student.id);
+                                leaveIds.remove(student.id);
+                              });
+                            },
+                            style: TextButton.styleFrom(
+                              backgroundColor: isPresent
+                                  ? const Color(0xFFDCFCE7)
+                                  : const Color(0xFFF8FAFF),
+                            ),
+                            child: Text(
+                              'Present',
+                              style: TextStyle(
+                                color: isPresent
+                                    ? const Color(0xFF166534)
+                                    : AppColors.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                warningText = '';
+                                if (isLeave) {
+                                  leaveIds.remove(student.id);
+                                  return;
+                                }
+                                leaveIds.add(student.id);
+                                presentIds.remove(student.id);
+                              });
+                            },
+                            style: TextButton.styleFrom(
+                              backgroundColor: isLeave
+                                  ? const Color(0xFFFFF3DC)
+                                  : const Color(0xFFF8FAFF),
+                            ),
+                            child: Text(
+                              'Leave',
+                              style: TextStyle(
+                                color: isLeave
+                                    ? const Color(0xFF9A3412)
+                                    : AppColors.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                children: <Widget>[
+                  OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  const Spacer(),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      final List<String> allIds = students
+                          .map((student) => student.id)
+                          .toList();
+                      final List<String> absentIds = allIds
+                          .where(
+                            (String id) =>
+                                !presentIds.contains(id) &&
+                                !leaveIds.contains(id),
+                          )
+                          .toList();
+                      await controller.submitTeacherAttendance(
+                        sessionId: session.id,
+                        presentStudentIds: presentIds.toList(),
+                        leaveStudentIds: leaveIds.toList(),
+                        absentStudentIds: absentIds,
+                      );
+                      if (context.mounted) {
+                        Navigator.of(context).pop();
+                      }
+                    },
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('Submit'),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -625,7 +1241,18 @@ class _AttendanceSessionHeader extends StatelessWidget {
           ),
           Expanded(
             flex: 2,
+            child: Text('Leave', style: TextStyle(fontWeight: FontWeight.w600)),
+          ),
+          Expanded(
+            flex: 2,
             child: Text('Total', style: TextStyle(fontWeight: FontWeight.w600)),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              'Attendance %',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
           Expanded(
             flex: 2,

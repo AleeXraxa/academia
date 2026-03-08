@@ -8,10 +8,19 @@ import 'package:academia/firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await _initializeFirebase();
   runApp(const MyApp());
+}
+
+Future<void> _initializeFirebase() async {
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } on UnsupportedError {
+    // Fallback for platforms not yet present in firebase_options.dart.
+    await Firebase.initializeApp();
+  }
 }
 
 class MyApp extends StatelessWidget {

@@ -65,7 +65,12 @@ class LoginController extends GetxController {
       }
 
       AppPages.setActiveRole(_toRole(user.role));
-      Get.offAllNamed(AppRoutes.dashboard);
+      final UserRole role = _toRole(user.role);
+      if (role == UserRole.teacher) {
+        Get.offAllNamed(AppRoutes.attendance);
+      } else {
+        Get.offAllNamed(AppRoutes.dashboard);
+      }
     } on FirebaseAuthException catch (e) {
       debugPrint('LOGIN FirebaseAuthException code=${e.code} message=${e.message}');
       await AppMessageDialog.showError(

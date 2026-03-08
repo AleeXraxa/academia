@@ -86,6 +86,7 @@ class AppPages {
           UserRole.superAdmin,
           UserRole.administrator,
           UserRole.cah,
+          UserRole.teacher,
         ],
       ),
     ),
