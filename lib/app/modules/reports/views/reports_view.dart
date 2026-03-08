@@ -8,8 +8,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
-class ReportsView extends StatelessWidget {
+class ReportsView extends StatefulWidget {
   const ReportsView({super.key});
+
+  @override
+  State<ReportsView> createState() => _ReportsViewState();
+}
+
+class _ReportsViewState extends State<ReportsView> {
+  late final ScrollController _sessionsHorizontalController;
+
+  @override
+  void initState() {
+    super.initState();
+    _sessionsHorizontalController = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    _sessionsHorizontalController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -18,6 +37,7 @@ class ReportsView extends StatelessWidget {
     return AppShell(
       currentRoute: AppRoutes.reports,
       child: AppPageScaffold(
+        contextHint: 'Administration / Analytics / Reports',
         title: 'Reports',
         subtitle: 'Premium attendance analytics for Admin and CAH.',
         child: Obx(() {
@@ -49,7 +69,11 @@ class ReportsView extends StatelessWidget {
                     children: <Widget>[
                       Expanded(
                         flex: 4,
-                        child: _sessionsPanel(context, sessions),
+                        child: _sessionsPanel(
+                          context,
+                          sessions,
+                          horizontalController: _sessionsHorizontalController,
+                        ),
                       ),
                       const SizedBox(width: AppSpacing.md),
                       Expanded(
@@ -359,7 +383,12 @@ class ReportsView extends StatelessWidget {
     );
   }
 
-  Widget _sessionsPanel(BuildContext context, List<ReportSession> sessions) {
+  Widget _sessionsPanel(
+    BuildContext context,
+    List<ReportSession> sessions, {
+    required ScrollController horizontalController,
+  }) {
+    const double minTableWidth = 980;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -387,24 +416,15 @@ class ReportsView extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF5F8FF),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFE4EAF7)),
-            ),
-            child: const Row(
-              children: <Widget>[
-                Expanded(flex: 2, child: Text('Date')),
-                Expanded(flex: 3, child: Text('Batch')),
-                Expanded(child: Text('P')),
-                Expanded(child: Text('L')),
-                Expanded(child: Text('A')),
-                Expanded(child: Text('Total')),
-                Expanded(flex: 2, child: Text('Attendance %')),
-                Expanded(flex: 2, child: Text('Status')),
-              ],
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Tip: Shift + mouse wheel to scroll horizontally',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary.withValues(alpha: 0.9),
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -416,97 +436,142 @@ class ReportsView extends StatelessWidget {
                       style: TextStyle(color: AppColors.textSecondary),
                     ),
                   )
-                : ListView.separated(
-                    itemCount: sessions.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (BuildContext context, int index) {
-                      final ReportSession s = sessions[index];
-                      final String d =
-                          '${s.date.year}-${s.date.month.toString().padLeft(2, '0')}-${s.date.day.toString().padLeft(2, '0')}';
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 9,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFCFDFF),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFE5EAF5)),
-                        ),
-                        child: Row(
+                : Scrollbar(
+                    controller: horizontalController,
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      controller: horizontalController,
+                      primary: false,
+                      scrollDirection: Axis.horizontal,
+                      child: SizedBox(
+                        width: minTableWidth,
+                        child: Column(
                           children: <Widget>[
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                d,
-                                style: const TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 12,
-                                ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 9,
                               ),
-                            ),
-                            Expanded(
-                              flex: 3,
-                              child: Text(
-                                s.batchName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 12,
-                                ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF5F8FF),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFE4EAF7)),
                               ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                '${s.presentCount}',
-                                style: const TextStyle(
-                                  color: AppColors.success,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                '${s.leaveCount}',
-                                style: const TextStyle(
-                                  color: AppColors.warning,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                '${s.absentCount}',
-                                style: const TextStyle(
-                                  color: AppColors.error,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            Expanded(child: Text('${s.totalStudents}')),
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                '${s.attendancePercent.toStringAsFixed(1)}%',
-                                style: const TextStyle(
-                                  color: AppColors.accent,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              flex: 2,
-                              child: Row(
+                              child: const Row(
                                 children: <Widget>[
-                                  Expanded(child: _statusChip(s.status)),
-                                  const SizedBox(width: 6),
-                                  _exportIcon(context, s, d),
+                                  Expanded(flex: 2, child: Text('Date')),
+                                  Expanded(flex: 3, child: Text('Batch')),
+                                  Expanded(child: Text('P')),
+                                  Expanded(child: Text('L')),
+                                  Expanded(child: Text('A')),
+                                  Expanded(child: Text('Total')),
+                                  Expanded(flex: 2, child: Text('Attendance %')),
+                                  Expanded(flex: 2, child: Text('Status')),
                                 ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Expanded(
+                              child: ListView.separated(
+                                itemCount: sessions.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 8),
+                                itemBuilder: (BuildContext context, int index) {
+                                  final ReportSession s = sessions[index];
+                                  final String d =
+                                      '${s.date.year}-${s.date.month.toString().padLeft(2, '0')}-${s.date.day.toString().padLeft(2, '0')}';
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 9,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFCFDFF),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: const Color(0xFFE5EAF5),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: <Widget>[
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            d,
+                                            style: const TextStyle(
+                                              color: AppColors.textSecondary,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 3,
+                                          child: Text(
+                                            s.batchName,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: Text(
+                                            '${s.presentCount}',
+                                            style: const TextStyle(
+                                              color: AppColors.success,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: Text(
+                                            '${s.leaveCount}',
+                                            style: const TextStyle(
+                                              color: AppColors.warning,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: Text(
+                                            '${s.absentCount}',
+                                            style: const TextStyle(
+                                              color: AppColors.error,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                        Expanded(child: Text('${s.totalStudents}')),
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            '${s.attendancePercent.toStringAsFixed(1)}%',
+                                            style: const TextStyle(
+                                              color: AppColors.accent,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: Row(
+                                            children: <Widget>[
+                                              Expanded(child: _statusChip(s.status)),
+                                              const SizedBox(width: 6),
+                                              _exportIcon(context, s, d),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
                               ),
                             ),
                           ],
                         ),
-                      );
-                    },
+                      ),
+                    ),
                   ),
           ),
         ],

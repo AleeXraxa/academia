@@ -18,6 +18,8 @@ class _SettingsViewState extends State<SettingsView> {
   late final SettingsController _controller;
   late final TextEditingController _instituteController;
   late final TextEditingController _supportController;
+  String? _instituteError;
+  String? _supportError;
 
   @override
   void initState() {
@@ -39,6 +41,7 @@ class _SettingsViewState extends State<SettingsView> {
     return AppShell(
       currentRoute: AppRoutes.settings,
       child: AppPageScaffold(
+        contextHint: 'Administration / Configuration / Settings',
         title: 'Settings',
         subtitle: 'Configure platform defaults, attendance policy and system controls.',
         child: Obx(() {
@@ -61,7 +64,12 @@ class _SettingsViewState extends State<SettingsView> {
             _supportController.text = _controller.supportEmail.value;
           }
 
-          return LayoutBuilder(
+          return AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            child: LayoutBuilder(
+            key: ValueKey<String>(
+              '${_controller.lockSubmittedSessions.value}-${_controller.requireCorrectionNote.value}-${_controller.includeLeaveInAttendance.value}-${_controller.defaultHistoryDays.value}',
+            ),
             builder: (BuildContext context, BoxConstraints constraints) {
               final bool compact = constraints.maxWidth < 1200;
               if (compact) {
@@ -112,6 +120,7 @@ class _SettingsViewState extends State<SettingsView> {
                 ],
               );
             },
+          ),
           );
         }),
       ),
@@ -204,18 +213,32 @@ class _SettingsViewState extends State<SettingsView> {
         children: <Widget>[
           TextField(
             controller: _instituteController,
+            onChanged: (_) {
+              if (_instituteError != null) {
+                setState(() {
+                  _instituteError = null;
+                });
+              }
+            },
             decoration: const InputDecoration(
               labelText: 'Institute Name',
               prefixIcon: Icon(Icons.school_rounded),
-            ),
+            ).copyWith(errorText: _instituteError),
           ),
           const SizedBox(height: AppSpacing.sm),
           TextField(
             controller: _supportController,
+            onChanged: (_) {
+              if (_supportError != null) {
+                setState(() {
+                  _supportError = null;
+                });
+              }
+            },
             decoration: const InputDecoration(
               labelText: 'Support Email',
               prefixIcon: Icon(Icons.support_agent_rounded),
-            ),
+            ).copyWith(errorText: _supportError),
           ),
           const SizedBox(height: AppSpacing.sm),
           DropdownButtonFormField<int>(
@@ -282,26 +305,138 @@ class _SettingsViewState extends State<SettingsView> {
         onPressed: _controller.isSaving.value
             ? null
             : () async {
+                final String instituteName = _instituteController.text.trim();
+                final String supportEmail = _supportController.text.trim();
+                String? instituteError;
+                String? supportError;
+                if (instituteName.isEmpty) {
+                  instituteError = 'Institute name is required.';
+                }
+                if (supportEmail.isNotEmpty &&
+                    !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(supportEmail)) {
+                  supportError = 'Enter a valid email address.';
+                }
+                if (instituteError != null || supportError != null) {
+                  setState(() {
+                    _instituteError = instituteError;
+                    _supportError = supportError;
+                  });
+                  return;
+                }
                 await _controller.saveSettings(
-                  instituteNameValue: _instituteController.text,
-                  supportEmailValue: _supportController.text,
+                  instituteNameValue: instituteName,
+                  supportEmailValue: supportEmail,
                   historyDays: _controller.defaultHistoryDays.value,
                 );
                 if (context.mounted) {
-                  showDialog<void>(
+                  await showGeneralDialog<void>(
                     context: context,
-                    builder: (BuildContext dialogContext) {
-                      return AlertDialog(
-                        title: const Text('Settings Updated'),
-                        content: const Text(
-                          'Configuration has been saved successfully.',
-                        ),
-                        actions: <Widget>[
-                          TextButton(
-                            onPressed: () => Navigator.of(dialogContext).pop(),
-                            child: const Text('OK'),
+                    barrierDismissible: true,
+                    barrierLabel: 'settings_saved',
+                    barrierColor: Colors.black.withValues(alpha: 0.24),
+                    transitionDuration: const Duration(milliseconds: 220),
+                    pageBuilder:
+                        (
+                          BuildContext dialogContext,
+                          Animation<double> _,
+                          Animation<double> __,
+                        ) {
+                      return Center(
+                        child: Material(
+                          color: Colors.transparent,
+                          child: Container(
+                            width: 420,
+                            margin: const EdgeInsets.symmetric(horizontal: 24),
+                            padding: const EdgeInsets.all(18),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: AppColors.border),
+                              boxShadow: const <BoxShadow>[
+                                BoxShadow(
+                                  color: Color(0x220F172A),
+                                  blurRadius: 28,
+                                  offset: Offset(0, 12),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Row(
+                                  children: <Widget>[
+                                    Container(
+                                      width: 38,
+                                      height: 38,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFDCFCE7),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Icon(
+                                        Icons.check_circle_rounded,
+                                        color: Color(0xFF166534),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    const Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: <Widget>[
+                                          Text(
+                                            'Settings Updated',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 17,
+                                            ),
+                                          ),
+                                          SizedBox(height: 2),
+                                          Text(
+                                            'Configuration has been saved successfully.',
+                                            style: TextStyle(
+                                              color: AppColors.textSecondary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: AppSpacing.md),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: FilledButton(
+                                    onPressed: () =>
+                                        Navigator.of(dialogContext).pop(),
+                                    child: const Text('Done'),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ],
+                        ),
+                      );
+                    },
+                    transitionBuilder:
+                        (
+                          BuildContext _,
+                          Animation<double> animation,
+                          Animation<double> __,
+                          Widget child,
+                        ) {
+                      final Animation<double> curve = CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutCubic,
+                      );
+                      return FadeTransition(
+                        opacity: curve,
+                        child: ScaleTransition(
+                          scale: Tween<double>(
+                            begin: 0.98,
+                            end: 1,
+                          ).animate(curve),
+                          child: child,
+                        ),
                       );
                     },
                   );

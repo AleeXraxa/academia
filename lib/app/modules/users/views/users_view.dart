@@ -242,6 +242,7 @@ class UsersView extends StatelessWidget {
         : '${createdAt.year}-${createdAt.month.toString().padLeft(2, '0')}-${createdAt.day.toString().padLeft(2, '0')}';
 
     final String normalizedStatus = user.status.trim().toLowerCase();
+    final bool canEdit = _canEditUser(controller, user);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
@@ -335,9 +336,15 @@ class UsersView extends StatelessWidget {
                 _actionButton(
                   label: 'Edit',
                   icon: Icons.edit_outlined,
-                  bg: const Color(0xFFE9EEFF),
-                  fg: AppColors.accent,
-                  onTap: () => _openEditDialog(context, controller, user),
+                  bg: canEdit
+                      ? const Color(0xFFE9EEFF)
+                      : const Color(0xFFF3F4F6),
+                  fg: canEdit
+                      ? AppColors.accent
+                      : const Color(0xFF9CA3AF),
+                  onTap: canEdit
+                      ? () => _openEditDialog(context, controller, user)
+                      : () {},
                 ),
                 _actionButton(
                   label: 'Delete',
@@ -480,13 +487,20 @@ class UsersView extends StatelessWidget {
       title: 'Create User',
       actionLabel: 'Create',
       initialRole: 'Teacher',
+      includePassword: true,
       onSubmit:
           ({
             required String name,
             required String email,
             required String role,
+            String? password,
           }) async {
-            await controller.createUser(name: name, email: email, role: role);
+            await controller.createUser(
+              name: name,
+              email: email,
+              role: role,
+              password: password ?? '',
+            );
           },
     );
   }
@@ -503,11 +517,13 @@ class UsersView extends StatelessWidget {
       initialName: user.name,
       initialEmail: user.email,
       initialRole: user.role,
+      includePassword: false,
       onSubmit:
           ({
             required String name,
             required String email,
             required String role,
+            String? password,
           }) async {
             await controller.updateUser(
               id: user.id,
@@ -527,8 +543,10 @@ class UsersView extends StatelessWidget {
       required String name,
       required String email,
       required String role,
+      String? password,
     })
     onSubmit,
+    required bool includePassword,
     String initialName = '',
     String initialEmail = '',
     String initialRole = 'Teacher',
@@ -539,7 +557,15 @@ class UsersView extends StatelessWidget {
     final TextEditingController emailController = TextEditingController(
       text: initialEmail,
     );
-    String selectedRole = initialRole;
+    final TextEditingController passwordController = TextEditingController();
+    final UsersController usersController = Get.find<UsersController>();
+    final List<String> roleOptions = usersController.assignableRoles;
+    if (roleOptions.isEmpty) {
+      return;
+    }
+    String selectedRole = roleOptions.contains(initialRole)
+        ? initialRole
+        : roleOptions.first;
 
     await _showSaasDialog(
       context: context,
@@ -573,22 +599,31 @@ class UsersView extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.sm),
+                  if (includePassword) ...<Widget>[
+                    TextField(
+                      controller: passwordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Password',
+                        prefixIcon: Icon(Icons.lock_outline_rounded),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                  ],
                   DropdownButtonFormField<String>(
                     value: selectedRole,
                     decoration: const InputDecoration(
                       labelText: 'Role',
                       prefixIcon: Icon(Icons.badge_outlined),
                     ),
-                    items: const <DropdownMenuItem<String>>[
-                      DropdownMenuItem(
-                        value: 'Teacher',
-                        child: Text('Teacher'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Student',
-                        child: Text('Student'),
-                      ),
-                    ],
+                    items: roleOptions
+                        .map(
+                          (String role) => DropdownMenuItem<String>(
+                            value: role,
+                            child: Text(role),
+                          ),
+                        )
+                        .toList(),
                     onChanged: (String? value) {
                       if (value == null) {
                         return;
@@ -614,13 +649,93 @@ class UsersView extends StatelessWidget {
                           if (name.isEmpty || email.isEmpty) {
                             return;
                           }
+                          final String password = passwordController.text;
+                          if (includePassword && password.length < 6) {
+                            if (!context.mounted) {
+                              return;
+                            }
+                            await _showSaasDialog(
+                              context: context,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  _dialogHeader(
+                                    icon: Icons.error_outline_rounded,
+                                    title: 'Invalid Password',
+                                    subtitle: 'Minimum 6 characters required.',
+                                    accent: AppColors.error,
+                                  ),
+                                  const SizedBox(height: AppSpacing.md),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: FilledButton(
+                                      onPressed: () => Navigator.of(context).pop(),
+                                      child: const Text('OK'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                            return;
+                          }
 
-                          await onSubmit(
-                            name: name,
-                            email: email,
-                            role: selectedRole,
-                          );
-                          Navigator.of(context).pop();
+                          try {
+                            await onSubmit(
+                              name: name,
+                              email: email,
+                              role: selectedRole,
+                              password: includePassword ? password : null,
+                            );
+                            if (context.mounted) {
+                              Navigator.of(context).pop();
+                            }
+                          } catch (e) {
+                            if (!context.mounted) {
+                              return;
+                            }
+                            await _showSaasDialog(
+                              context: context,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  _dialogHeader(
+                                    icon: Icons.error_outline_rounded,
+                                    title: 'Action Not Allowed',
+                                    subtitle: 'Role permission check failed.',
+                                    accent: AppColors.error,
+                                  ),
+                                  const SizedBox(height: AppSpacing.md),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(AppSpacing.md),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFFF5F5),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: const Color(0xFFF5D0D0),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      '$e'.replaceFirst('Exception: ', ''),
+                                      style: const TextStyle(
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: AppSpacing.md),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: FilledButton(
+                                      onPressed: () => Navigator.of(context).pop(),
+                                      child: const Text('OK'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
                         },
                         icon: const Icon(Icons.check_rounded),
                         label: Text(actionLabel),
@@ -635,6 +750,7 @@ class UsersView extends StatelessWidget {
 
     nameController.dispose();
     emailController.dispose();
+    passwordController.dispose();
   }
 
   Future<void> _openViewDialog(BuildContext context, UserModel user) async {
@@ -869,6 +985,13 @@ class UsersView extends StatelessWidget {
       return value;
     }
     return value[0].toUpperCase() + value.substring(1).toLowerCase();
+  }
+
+  bool _canEditUser(UsersController controller, UserModel user) {
+    final List<String> roles = controller.assignableRoles
+        .map((String role) => role.trim().toUpperCase())
+        .toList();
+    return roles.contains(user.role.trim().toUpperCase());
   }
 }
 

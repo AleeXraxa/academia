@@ -1,11 +1,17 @@
 import 'dart:async';
 
+import 'package:academia/app/core/enums/user_role.dart';
+import 'package:academia/app/core/session/app_session.dart';
 import 'package:academia/app/data/models/user_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:get/get.dart';
 
 class UsersController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final AppSession _session = Get.find<AppSession>();
+  FirebaseAuth? _secondaryAuth;
 
   final RxList<UserModel> users = <UserModel>[].obs;
   final RxBool isLoading = true.obs;
@@ -19,6 +25,18 @@ class UsersController extends GetxController {
   int get rejectedUsers => users.where((UserModel user) => _status(user) == 'rejected').length;
   int get teachers => users.where((UserModel user) => user.role.toUpperCase() == 'TEACHER').length;
   int get students => users.where((UserModel user) => user.role.toUpperCase() == 'STUDENT').length;
+
+  List<String> get assignableRoles {
+    switch (_session.roleOrStaff) {
+      case UserRole.cah:
+      case UserRole.superAdmin:
+        return const <String>['CAH', 'Administrator', 'Teacher'];
+      case UserRole.administrator:
+        return const <String>['Teacher'];
+      default:
+        return const <String>[];
+    }
+  }
 
   @override
   void onInit() {
@@ -55,14 +73,27 @@ class UsersController extends GetxController {
     required String name,
     required String email,
     required String role,
+    required String password,
   }) async {
     final String normalizedRole = role.trim();
+    _ensureRoleManagementAllowed(normalizedRole);
+    final String normalizedEmail = email.trim().toLowerCase();
+    final FirebaseAuth secondaryAuth = await _ensureSecondaryAuth();
+    final UserCredential credential = await secondaryAuth
+        .createUserWithEmailAndPassword(
+          email: normalizedEmail,
+          password: password,
+        );
+    final User? createdUser = credential.user;
+    if (createdUser == null) {
+      throw Exception('Unable to create auth account.');
+    }
     final DocumentReference<Map<String, dynamic>> userDoc = _firestore
         .collection('users')
-        .doc();
+        .doc(createdUser.uid);
     final Map<String, dynamic> payload = <String, dynamic>{
       'name': name.trim(),
-      'email': email.trim().toLowerCase(),
+      'email': normalizedEmail,
       'role': normalizedRole,
       'status': 'approved',
       'createdAt': FieldValue.serverTimestamp(),
@@ -74,7 +105,7 @@ class UsersController extends GetxController {
     if (_isTeacherRole(normalizedRole)) {
       final DocumentReference<Map<String, dynamic>> teacherDoc = _firestore
           .collection('teachers')
-          .doc(userDoc.id);
+          .doc(createdUser.uid);
       batch.set(teacherDoc, <String, dynamic>{
         ...payload,
         'expertise': '',
@@ -93,6 +124,7 @@ class UsersController extends GetxController {
     required String role,
   }) async {
     final String normalizedRole = role.trim();
+    _ensureRoleManagementAllowed(normalizedRole);
     final DocumentReference<Map<String, dynamic>> userDoc = _firestore
         .collection('users')
         .doc(id);
@@ -106,6 +138,12 @@ class UsersController extends GetxController {
         await userDoc.get();
     final String previousRole =
         (currentSnapshot.data()?['role'] as String? ?? '').trim();
+    if (_session.roleOrStaff == UserRole.administrator &&
+        previousRole.toUpperCase() != 'TEACHER') {
+      throw Exception(
+        'Administrator can update Teacher accounts only.',
+      );
+    }
 
     final WriteBatch batch = _firestore.batch();
     batch.update(userDoc, <String, dynamic>{
@@ -201,6 +239,45 @@ class UsersController extends GetxController {
 
   bool _isTeacherRole(String role) {
     return role.trim().toUpperCase() == 'TEACHER';
+  }
+
+  Future<FirebaseAuth> _ensureSecondaryAuth() async {
+    if (_secondaryAuth != null) {
+      return _secondaryAuth!;
+    }
+
+    FirebaseApp? secondaryApp;
+    for (final FirebaseApp app in Firebase.apps) {
+      if (app.name == 'secondary_users_creator') {
+        secondaryApp = app;
+        break;
+      }
+    }
+
+    secondaryApp ??= await Firebase.initializeApp(
+      name: 'secondary_users_creator',
+      options: Firebase.app().options,
+    );
+    _secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+    return _secondaryAuth!;
+  }
+
+  void _ensureRoleManagementAllowed(String role) {
+    final String upper = role.trim().toUpperCase();
+    final UserRole actor = _session.roleOrStaff;
+    final bool allowed = switch (actor) {
+      UserRole.cah || UserRole.superAdmin =>
+        upper == 'CAH' || upper == 'ADMINISTRATOR' || upper == 'ADMIN' || upper == 'TEACHER',
+      UserRole.administrator => upper == 'TEACHER',
+      _ => false,
+    };
+    if (!allowed) {
+      throw Exception(
+        actor == UserRole.administrator
+            ? 'Administrator can create/update Teacher accounts only.'
+            : 'You are not allowed to assign this role.',
+      );
+    }
   }
 
   String _status(UserModel user) {

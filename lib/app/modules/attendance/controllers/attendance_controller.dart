@@ -38,7 +38,8 @@ class AttendanceController extends GetxController {
   final RxString historyStatus = ''.obs;
   final RxString historySearch = ''.obs;
   final RxList<String> selectedGenerationBatchIds = <String>[].obs;
-  final RxMap<String, String> generationPresentByBatchId = <String, String>{}.obs;
+  final RxMap<String, String> generationPresentByBatchId =
+      <String, String>{}.obs;
   final RxString selectedBatchId = ''.obs;
   final RxString selectedBatchName = ''.obs;
   final RxString presentCountInput = ''.obs;
@@ -114,13 +115,16 @@ class AttendanceController extends GetxController {
     final List<AdminAttendanceSession> sorted = todaySessions.toList();
     final String sortBy = tableSortBy.value;
     final bool asc = tableSortAscending.value;
-    int compareText(String a, String b) => asc ? a.compareTo(b) : b.compareTo(a);
+    int compareText(String a, String b) =>
+        asc ? a.compareTo(b) : b.compareTo(a);
     int compareNum(num a, num b) => asc ? a.compareTo(b) : b.compareTo(a);
     double attendancePct(AdminAttendanceSession session) {
       if (session.totalStudents <= 0) {
         return 0;
       }
-      return ((session.presentCount + session.leaveCount) / session.totalStudents) * 100;
+      return ((session.presentCount + session.leaveCount) /
+              session.totalStudents) *
+          100;
     }
 
     sorted.sort((AdminAttendanceSession a, AdminAttendanceSession b) {
@@ -139,7 +143,10 @@ class AttendanceController extends GetxController {
           return compareText(a.status.toLowerCase(), b.status.toLowerCase());
         case 'batch':
         default:
-          return compareText(a.batchName.toLowerCase(), b.batchName.toLowerCase());
+          return compareText(
+            a.batchName.toLowerCase(),
+            b.batchName.toLowerCase(),
+          );
       }
     });
     return sorted;
@@ -171,7 +178,9 @@ class AttendanceController extends GetxController {
       return <BatchModel>[];
     }
     return batches
-        .where((BatchModel batch) => (batch.teacherId ?? '').trim() == teacherUid)
+        .where(
+          (BatchModel batch) => (batch.teacherId ?? '').trim() == teacherUid,
+        )
         .toList();
   }
 
@@ -184,9 +193,11 @@ class AttendanceController extends GetxController {
     final DateTime now = DateTime.now();
     final DateTime startDate = rangeDays <= 0
         ? DateTime(2000, 1, 1)
-        : DateTime(now.year, now.month, now.day).subtract(
-            Duration(days: rangeDays - 1),
-          );
+        : DateTime(
+            now.year,
+            now.month,
+            now.day,
+          ).subtract(Duration(days: rangeDays - 1));
 
     final List<AdminAttendanceSession> filtered = historySessions.where((
       AdminAttendanceSession session,
@@ -208,14 +219,22 @@ class AttendanceController extends GetxController {
           DateTime.tryParse('${session.dateKey} 00:00:00') ??
           DateTime(2000, 1, 1);
       final bool dateMatch = rangeDays <= 0 || !sessionDate.isBefore(startDate);
-      return batchMatch && teacherMatch && statusMatch && searchMatch && dateMatch;
+      return batchMatch &&
+          teacherMatch &&
+          statusMatch &&
+          searchMatch &&
+          dateMatch;
     }).toList();
 
     filtered.sort((AdminAttendanceSession a, AdminAttendanceSession b) {
       final DateTime ad =
-          a.date ?? DateTime.tryParse('${a.dateKey} 00:00:00') ?? DateTime(2000, 1, 1);
+          a.date ??
+          DateTime.tryParse('${a.dateKey} 00:00:00') ??
+          DateTime(2000, 1, 1);
       final DateTime bd =
-          b.date ?? DateTime.tryParse('${b.dateKey} 00:00:00') ?? DateTime(2000, 1, 1);
+          b.date ??
+          DateTime.tryParse('${b.dateKey} 00:00:00') ??
+          DateTime(2000, 1, 1);
       return bd.compareTo(ad);
     });
     return filtered;
@@ -238,17 +257,18 @@ class AttendanceController extends GetxController {
     if (filteredHistorySessions.isEmpty) {
       return 0;
     }
-    final double total = filteredHistorySessions.fold<double>(
-      0,
-      (double sum, AdminAttendanceSession session) {
-        if (session.totalStudents <= 0) {
-          return sum;
-        }
-        return sum +
-            ((session.presentCount + session.leaveCount) / session.totalStudents) *
-                100;
-      },
-    );
+    final double total = filteredHistorySessions.fold<double>(0, (
+      double sum,
+      AdminAttendanceSession session,
+    ) {
+      if (session.totalStudents <= 0) {
+        return sum;
+      }
+      return sum +
+          ((session.presentCount + session.leaveCount) /
+                  session.totalStudents) *
+              100;
+    });
     return total / filteredHistorySessions.length;
   }
 
@@ -263,7 +283,8 @@ class AttendanceController extends GetxController {
       }
       final String key = '${session.batchId}|${session.batchName}';
       final double percent =
-          ((session.presentCount + session.leaveCount) / session.totalStudents) *
+          ((session.presentCount + session.leaveCount) /
+              session.totalStudents) *
           100;
       batchScores.putIfAbsent(key, () => <double>[]).add(percent);
     }
@@ -273,7 +294,8 @@ class AttendanceController extends GetxController {
     String bestName = '--';
     double bestAvg = -1;
     batchScores.forEach((String key, List<double> values) {
-      final double avg = values.reduce((double a, double b) => a + b) / values.length;
+      final double avg =
+          values.reduce((double a, double b) => a + b) / values.length;
       if (avg > bestAvg) {
         bestAvg = avg;
         bestName = key.split('|').last;
@@ -297,10 +319,10 @@ class AttendanceController extends GetxController {
       }
     }
     final List<HistoryTeacherOption> options = byId.entries
-        .map((MapEntry<String, String> entry) => HistoryTeacherOption(
-              id: entry.key,
-              name: entry.value,
-            ))
+        .map(
+          (MapEntry<String, String> entry) =>
+              HistoryTeacherOption(id: entry.key, name: entry.value),
+        )
         .toList();
     options.sort(
       (HistoryTeacherOption a, HistoryTeacherOption b) =>
@@ -331,12 +353,15 @@ class AttendanceController extends GetxController {
   }
 
   bool get isUsingScheduleFallback {
-    return todayScheduledBatches.isEmpty && generationCandidateBatches.isNotEmpty;
+    return todayScheduledBatches.isEmpty &&
+        generationCandidateBatches.isNotEmpty;
   }
 
   bool isBatchSelectedForGeneration(String batchId) {
     final String id = batchId.trim();
-    return selectedGenerationBatchIds.any((String selectedId) => selectedId == id);
+    return selectedGenerationBatchIds.any(
+      (String selectedId) => selectedId == id,
+    );
   }
 
   String presentInputForBatch(String batchId) {
@@ -415,23 +440,23 @@ class AttendanceController extends GetxController {
       await _attendanceService.setSession(
         sessionId: docId,
         data: <String, dynamic>{
-        'dateKey': todayKey,
-        'date': Timestamp.fromDate(
-          DateTime(
-            DateTime.now().year,
-            DateTime.now().month,
-            DateTime.now().day,
+          'dateKey': todayKey,
+          'date': Timestamp.fromDate(
+            DateTime(
+              DateTime.now().year,
+              DateTime.now().month,
+              DateTime.now().day,
+            ),
           ),
-        ),
-        'batchId': batchId,
-        'batchName': batchName,
-        'totalStudents': totalStudents,
-        'presentCount': presentCount,
-        'leaveCount': 0,
-        'absentCount': absentCount,
-        'status': 'open',
-        'updatedAt': FieldValue.serverTimestamp(),
-        'createdAt': FieldValue.serverTimestamp(),
+          'batchId': batchId,
+          'batchName': batchName,
+          'totalStudents': totalStudents,
+          'presentCount': presentCount,
+          'leaveCount': 0,
+          'absentCount': absentCount,
+          'status': 'open',
+          'updatedAt': FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
         },
         merge: true,
       );
@@ -468,13 +493,16 @@ class AttendanceController extends GetxController {
         if (batch == null) {
           throw Exception('Selected batch is not scheduled for today.');
         }
-        final String rawInput = (generationPresentByBatchId[batchId] ?? '').trim();
+        final String rawInput = (generationPresentByBatchId[batchId] ?? '')
+            .trim();
         final int? presentCount = int.tryParse(rawInput);
         if (presentCount == null) {
           throw Exception('Enter valid present count for ${batch.name}.');
         }
         if (presentCount < 0) {
-          throw Exception('Present count cannot be negative for ${batch.name}.');
+          throw Exception(
+            'Present count cannot be negative for ${batch.name}.',
+          );
         }
         final int totalStudents = batch.studentsCount ?? 0;
         if (presentCount > totalStudents) {
@@ -504,7 +532,10 @@ class AttendanceController extends GetxController {
         final int presentCount = int.parse(
           (generationPresentByBatchId[batchId] ?? '0').trim(),
         );
-        final int absentCount = (totalStudents - presentCount).clamp(0, 1000000);
+        final int absentCount = (totalStudents - presentCount).clamp(
+          0,
+          1000000,
+        );
         sessionsPayload['${todayKey}_$batchId'] = <String, dynamic>{
           'dateKey': todayKey,
           'date': Timestamp.fromDate(
@@ -538,7 +569,9 @@ class AttendanceController extends GetxController {
     return _attendanceService.fetchStudentsForBatch(batchId);
   }
 
-  Future<Map<String, String>> fetchStudentNamesByIds(List<String> studentIds) async {
+  Future<Map<String, String>> fetchStudentNamesByIds(
+    List<String> studentIds,
+  ) async {
     return _attendanceService.fetchStudentNamesByIds(studentIds);
   }
 
@@ -569,17 +602,17 @@ class AttendanceController extends GetxController {
     await _attendanceService.updateSession(
       sessionId: sessionId,
       data: <String, dynamic>{
-          'presentCount': presentCount,
-          'leaveCount': leaveCount,
-          'absentCount': computedAbsentCount,
-          'presentStudentIds': presentStudentIds,
-          'leaveStudentIds': leaveStudentIds,
-          'absentStudentIds': normalizedAbsentStudentIds,
-          'teacherMarkedBy': uid,
-          'teacherMarkedAt': FieldValue.serverTimestamp(),
-          'teacherSubmitted': true,
-          'status': 'submitted_by_teacher',
-          'updatedAt': FieldValue.serverTimestamp(),
+        'presentCount': presentCount,
+        'leaveCount': leaveCount,
+        'absentCount': computedAbsentCount,
+        'presentStudentIds': presentStudentIds,
+        'leaveStudentIds': leaveStudentIds,
+        'absentStudentIds': normalizedAbsentStudentIds,
+        'teacherMarkedBy': uid,
+        'teacherMarkedAt': FieldValue.serverTimestamp(),
+        'teacherSubmitted': true,
+        'status': 'submitted_by_teacher',
+        'updatedAt': FieldValue.serverTimestamp(),
       },
     );
   }
@@ -600,10 +633,14 @@ class AttendanceController extends GetxController {
         .toSet();
     leaveSet.removeWhere((String id) => presentSet.contains(id));
 
-    final List<StudentModel> students = await fetchStudentsForBatch(session.batchId);
+    final List<StudentModel> students = await fetchStudentsForBatch(
+      session.batchId,
+    );
     final List<String> allIds = students.map((StudentModel s) => s.id).toList();
     final List<String> absentIds = allIds
-        .where((String id) => !presentSet.contains(id) && !leaveSet.contains(id))
+        .where(
+          (String id) => !presentSet.contains(id) && !leaveSet.contains(id),
+        )
         .toList();
 
     final int totalStudents = session.totalStudents > 0
@@ -653,23 +690,23 @@ class AttendanceController extends GetxController {
     isLoading.value = true;
 
     _batchesSubscription = _attendanceService.watchBatches().listen(
-          (QuerySnapshot<Map<String, dynamic>> snapshot) {
-            final List<BatchModel> mapped = snapshot.docs
-                .map(
-                  (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
-                      BatchModel.fromMap(id: doc.id, map: doc.data()),
-                )
-                .toList();
-            batches.assignAll(mapped);
-            _applySessionVisibility();
-            isLoading.value = false;
-            errorText.value = '';
-          },
-          onError: (_) {
-            errorText.value = 'Unable to load batches.';
-            isLoading.value = false;
-          },
-        );
+      (QuerySnapshot<Map<String, dynamic>> snapshot) {
+        final List<BatchModel> mapped = snapshot.docs
+            .map(
+              (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
+                  BatchModel.fromMap(id: doc.id, map: doc.data()),
+            )
+            .toList();
+        batches.assignAll(mapped);
+        _applySessionVisibility();
+        isLoading.value = false;
+        errorText.value = '';
+      },
+      onError: (_) {
+        errorText.value = 'Unable to load batches.';
+        isLoading.value = false;
+      },
+    );
   }
 
   void _listenTodaySessions() {
