@@ -1,8 +1,8 @@
 import 'package:academia/app/data/repositories/auth_repository.dart';
 import 'package:academia/app/core/enums/user_role.dart';
+import 'package:academia/app/core/session/app_session.dart';
 import 'package:academia/app/core/utils/auth_error_mapper.dart';
 import 'package:academia/app/data/models/user_model.dart';
-import 'package:academia/app/routes/app_pages.dart';
 import 'package:academia/app/routes/app_routes.dart';
 import 'package:academia/app/services/auth_service.dart';
 import 'package:academia/app/widgets/common/app_message_dialog.dart';
@@ -64,8 +64,8 @@ class LoginController extends GetxController {
         return;
       }
 
-      AppPages.setActiveRole(_toRole(user.role));
       final UserRole role = _toRole(user.role);
+      Get.find<AppSession>().setRole(role);
       if (role == UserRole.teacher) {
         Get.offAllNamed(AppRoutes.attendance);
       } else {

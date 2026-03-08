@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:academia/app/core/constants/app_constants.dart';
+import 'package:academia/app/core/session/app_session.dart';
 import 'package:academia/app/routes/app_pages.dart';
 import 'package:academia/app/theme/app_theme.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -9,6 +10,7 @@ import 'package:academia/firebase_options.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await _initializeFirebase();
+  Get.put<AppSession>(AppSession(), permanent: true);
   runApp(const MyApp());
 }
 

@@ -1,8 +1,9 @@
 import 'package:academia/app/core/enums/user_role.dart';
-import 'package:academia/app/routes/app_pages.dart';
+import 'package:academia/app/core/session/app_session.dart';
 import 'package:academia/app/routes/app_routes.dart';
 import 'package:academia/app/theme/app_colors.dart';
 import 'package:academia/app/theme/app_spacing.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -82,7 +83,8 @@ class _TopBar extends StatelessWidget {
   }
 
   String _activeRoleLabel() {
-    switch (AppPages.activeRole) {
+    final AppSession session = Get.find<AppSession>();
+    switch (session.roleOrStaff) {
       case UserRole.superAdmin:
         return 'Super Admin';
       case UserRole.administrator:
@@ -254,7 +256,11 @@ class _Sidebar extends StatelessWidget {
             child: SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: () => Get.offAllNamed(AppRoutes.login),
+                onPressed: () async {
+                  await FirebaseAuth.instance.signOut();
+                  Get.find<AppSession>().clear();
+                  Get.offAllNamed(AppRoutes.login);
+                },
                 icon: const Icon(Icons.logout_rounded),
                 label: const Text('Sign Out'),
               ),

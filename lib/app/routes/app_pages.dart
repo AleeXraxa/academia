@@ -1,5 +1,6 @@
 import 'package:academia/app/core/enums/user_role.dart';
 import 'package:academia/app/core/guards/role_guard.dart';
+import 'package:academia/app/core/session/app_session.dart';
 import 'package:academia/app/modules/attendance/views/attendance_view.dart';
 import 'package:academia/app/modules/auth/views/login_view.dart';
 import 'package:academia/app/modules/auth/views/register_view.dart';
@@ -7,6 +8,7 @@ import 'package:academia/app/modules/batches/views/batches_view.dart';
 import 'package:academia/app/modules/dashboard/views/dashboard_view.dart';
 import 'package:academia/app/modules/reports/views/reports_view.dart';
 import 'package:academia/app/modules/settings/views/settings_view.dart';
+import 'package:academia/app/modules/splash/views/splash_view.dart';
 import 'package:academia/app/modules/students/views/students_view.dart';
 import 'package:academia/app/modules/teachers/views/teachers_view.dart';
 import 'package:academia/app/modules/users/views/users_view.dart';
@@ -16,16 +18,13 @@ import 'package:get/get.dart';
 class AppPages {
   AppPages._();
 
-  static const String initial = AppRoutes.login;
-
-  // Temporary role until auth/session service is wired.
-  static UserRole activeRole = UserRole.administrator;
-
-  static void setActiveRole(UserRole role) {
-    activeRole = role;
-  }
+  static const String initial = AppRoutes.splash;
 
   static final List<GetPage<dynamic>> pages = <GetPage<dynamic>>[
+    GetPage<dynamic>(
+      name: AppRoutes.splash,
+      page: () => const SplashView(),
+    ),
     GetPage<dynamic>(
       name: AppRoutes.login,
       page: () => const LoginView(),
@@ -129,8 +128,9 @@ class AppPages {
     required dynamic view,
     required List<UserRole> allowedRoles,
   }) {
+    final AppSession session = Get.find<AppSession>();
     final bool allowed = RoleGuard.canAccess(
-      activeRole: activeRole,
+      activeRole: session.roleOrStaff,
       allowedRoles: allowedRoles,
     );
 
