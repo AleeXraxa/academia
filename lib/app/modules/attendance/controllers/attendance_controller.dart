@@ -27,10 +27,16 @@ class AttendanceController extends GetxController {
 
   final RxBool isLoading = true.obs;
   final RxBool isSaving = false.obs;
+  final RxBool isCompactTable = false.obs;
+  final RxString tableSortBy = 'batch'.obs;
+  final RxBool tableSortAscending = true.obs;
   final RxBool showMarkForm = false.obs;
   final RxInt mobileTabIndex = 0.obs;
   final RxInt historyRangeDays = 7.obs;
   final RxString historyBatchId = ''.obs;
+  final RxString historyTeacherId = ''.obs;
+  final RxString historyStatus = ''.obs;
+  final RxString historySearch = ''.obs;
   final RxList<String> selectedGenerationBatchIds = <String>[].obs;
   final RxMap<String, String> generationPresentByBatchId = <String, String>{}.obs;
   final RxString selectedBatchId = ''.obs;
@@ -74,12 +80,69 @@ class AttendanceController extends GetxController {
   }
 
   void openMarkForm() {
-    _prepareGenerationState();
     showMarkForm.value = true;
+    try {
+      _prepareGenerationState();
+    } catch (_) {
+      selectedGenerationBatchIds.clear();
+      generationPresentByBatchId.clear();
+    }
   }
 
   void updateMobileTab(int index) {
     mobileTabIndex.value = index;
+  }
+
+  void toggleCompactTable() {
+    isCompactTable.value = !isCompactTable.value;
+  }
+
+  void updateTableSort(String sortBy) {
+    final String key = sortBy.trim().toLowerCase();
+    if (key.isEmpty) {
+      return;
+    }
+    if (tableSortBy.value == key) {
+      tableSortAscending.value = !tableSortAscending.value;
+      return;
+    }
+    tableSortBy.value = key;
+    tableSortAscending.value = true;
+  }
+
+  List<AdminAttendanceSession> get sortedTodaySessions {
+    final List<AdminAttendanceSession> sorted = todaySessions.toList();
+    final String sortBy = tableSortBy.value;
+    final bool asc = tableSortAscending.value;
+    int compareText(String a, String b) => asc ? a.compareTo(b) : b.compareTo(a);
+    int compareNum(num a, num b) => asc ? a.compareTo(b) : b.compareTo(a);
+    double attendancePct(AdminAttendanceSession session) {
+      if (session.totalStudents <= 0) {
+        return 0;
+      }
+      return ((session.presentCount + session.leaveCount) / session.totalStudents) * 100;
+    }
+
+    sorted.sort((AdminAttendanceSession a, AdminAttendanceSession b) {
+      switch (sortBy) {
+        case 'present':
+          return compareNum(a.presentCount, b.presentCount);
+        case 'absent':
+          return compareNum(a.absentCount, b.absentCount);
+        case 'leave':
+          return compareNum(a.leaveCount, b.leaveCount);
+        case 'total':
+          return compareNum(a.totalStudents, b.totalStudents);
+        case 'attendance':
+          return compareNum(attendancePct(a), attendancePct(b));
+        case 'status':
+          return compareText(a.status.toLowerCase(), b.status.toLowerCase());
+        case 'batch':
+        default:
+          return compareText(a.batchName.toLowerCase(), b.batchName.toLowerCase());
+      }
+    });
+    return sorted;
   }
 
   void updateHistoryRangeDays(int days) {
@@ -88,6 +151,18 @@ class AttendanceController extends GetxController {
 
   void updateHistoryBatchId(String batchId) {
     historyBatchId.value = batchId.trim();
+  }
+
+  void updateHistoryTeacherId(String teacherId) {
+    historyTeacherId.value = teacherId.trim();
+  }
+
+  void updateHistoryStatus(String status) {
+    historyStatus.value = status.trim().toLowerCase();
+  }
+
+  void updateHistorySearch(String search) {
+    historySearch.value = search.trim().toLowerCase();
   }
 
   List<BatchModel> get teacherAssignedBatches {
@@ -103,6 +178,9 @@ class AttendanceController extends GetxController {
   List<AdminAttendanceSession> get filteredHistorySessions {
     final int rangeDays = historyRangeDays.value;
     final String selectedBatch = historyBatchId.value.trim();
+    final String selectedTeacherId = historyTeacherId.value.trim();
+    final String selectedStatus = historyStatus.value.trim().toLowerCase();
+    final String search = historySearch.value.trim().toLowerCase();
     final DateTime now = DateTime.now();
     final DateTime startDate = rangeDays <= 0
         ? DateTime(2000, 1, 1)
@@ -115,12 +193,22 @@ class AttendanceController extends GetxController {
     ) {
       final bool batchMatch =
           selectedBatch.isEmpty || session.batchId.trim() == selectedBatch;
+      final bool teacherMatch =
+          selectedTeacherId.isEmpty ||
+          _teacherIdForBatch(session.batchId) == selectedTeacherId;
+      final bool statusMatch =
+          selectedStatus.isEmpty ||
+          session.status.trim().toLowerCase() == selectedStatus;
+      final bool searchMatch =
+          search.isEmpty ||
+          session.batchName.toLowerCase().contains(search) ||
+          session.id.toLowerCase().contains(search);
       final DateTime sessionDate =
           session.date ??
           DateTime.tryParse('${session.dateKey} 00:00:00') ??
           DateTime(2000, 1, 1);
       final bool dateMatch = rangeDays <= 0 || !sessionDate.isBefore(startDate);
-      return batchMatch && dateMatch;
+      return batchMatch && teacherMatch && statusMatch && searchMatch && dateMatch;
     }).toList();
 
     filtered.sort((AdminAttendanceSession a, AdminAttendanceSession b) {
@@ -192,6 +280,33 @@ class AttendanceController extends GetxController {
       }
     });
     return bestName;
+  }
+
+  List<HistoryTeacherOption> get historyTeacherOptions {
+    final Map<String, String> byId = <String, String>{};
+    for (final BatchModel batch in batches) {
+      final String id = (batch.teacherId ?? '').trim();
+      if (id.isEmpty) {
+        continue;
+      }
+      final String name = (batch.teacherName ?? '').trim();
+      if (name.isNotEmpty) {
+        byId[id] = name;
+      } else {
+        byId[id] = byId[id] ?? 'Teacher $id';
+      }
+    }
+    final List<HistoryTeacherOption> options = byId.entries
+        .map((MapEntry<String, String> entry) => HistoryTeacherOption(
+              id: entry.key,
+              name: entry.value,
+            ))
+        .toList();
+    options.sort(
+      (HistoryTeacherOption a, HistoryTeacherOption b) =>
+          a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
+    return options;
   }
 
   void closeMarkForm() {
@@ -469,6 +584,70 @@ class AttendanceController extends GetxController {
     );
   }
 
+  Future<void> adminCorrectSession({
+    required AdminAttendanceSession session,
+    required List<String> presentStudentIds,
+    required List<String> leaveStudentIds,
+    required String note,
+  }) async {
+    final Set<String> presentSet = presentStudentIds
+        .map((String id) => id.trim())
+        .where((String id) => id.isNotEmpty)
+        .toSet();
+    final Set<String> leaveSet = leaveStudentIds
+        .map((String id) => id.trim())
+        .where((String id) => id.isNotEmpty)
+        .toSet();
+    leaveSet.removeWhere((String id) => presentSet.contains(id));
+
+    final List<StudentModel> students = await fetchStudentsForBatch(session.batchId);
+    final List<String> allIds = students.map((StudentModel s) => s.id).toList();
+    final List<String> absentIds = allIds
+        .where((String id) => !presentSet.contains(id) && !leaveSet.contains(id))
+        .toList();
+
+    final int totalStudents = session.totalStudents > 0
+        ? session.totalStudents
+        : allIds.length;
+    final int presentCount = presentSet.length;
+    final int leaveCount = leaveSet.length;
+    final int absentCount = (totalStudents - presentCount - leaveCount).clamp(
+      0,
+      1000000,
+    );
+    final String uid = _auth.currentUser?.uid ?? '';
+    final String role = Get.find<AppSession>().roleOrStaff.name;
+    final Map<String, dynamic> auditItem = <String, dynamic>{
+      'action': 'admin_correction',
+      'uid': uid,
+      'role': role,
+      'note': note.trim(),
+      'presentCount': presentCount,
+      'leaveCount': leaveCount,
+      'absentCount': absentCount,
+      'at': Timestamp.now(),
+    };
+
+    await _attendanceService.updateSession(
+      sessionId: session.id,
+      data: <String, dynamic>{
+        'presentStudentIds': presentSet.toList(),
+        'leaveStudentIds': leaveSet.toList(),
+        'absentStudentIds': absentIds.take(absentCount).toList(),
+        'presentCount': presentCount,
+        'leaveCount': leaveCount,
+        'absentCount': absentCount,
+        'status': 'completed',
+        'teacherSubmitted': true,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'correctedBy': uid,
+        'correctedRole': role,
+        'correctedAt': FieldValue.serverTimestamp(),
+        'auditLogs': FieldValue.arrayUnion(<Map<String, dynamic>>[auditItem]),
+      },
+    );
+  }
+
   void _listenBatches() {
     _batchesSubscription?.cancel();
     isLoading.value = true;
@@ -614,6 +793,19 @@ class AttendanceController extends GetxController {
       default:
         return 'Sunday';
     }
+  }
+
+  String _teacherIdForBatch(String batchId) {
+    final String normalized = batchId.trim();
+    if (normalized.isEmpty) {
+      return '';
+    }
+    for (final BatchModel batch in batches) {
+      if (batch.id.trim() == normalized) {
+        return (batch.teacherId ?? '').trim();
+      }
+    }
+    return '';
   }
 
   void _applySessionVisibility() {
@@ -763,4 +955,11 @@ class AdminAttendanceSession {
       absentStudentIds: absentStudentIds,
     );
   }
+}
+
+class HistoryTeacherOption {
+  const HistoryTeacherOption({required this.id, required this.name});
+
+  final String id;
+  final String name;
 }
