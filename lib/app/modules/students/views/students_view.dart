@@ -586,6 +586,7 @@ class StudentsView extends StatelessWidget {
     String? selectedBatchId = initialBatchId.trim().isEmpty
         ? null
         : initialBatchId;
+    bool isSubmitting = false;
 
     await _showSaasDialog(
       context: context,
@@ -726,50 +727,131 @@ class StudentsView extends StatelessWidget {
                       ),
                       const Spacer(),
                       FilledButton.icon(
-                        onPressed: () async {
-                          final String name = nameController.text.trim();
-                          final String studentId = studentIdController.text
-                              .trim();
-                          final String email = emailController.text.trim();
-                          final String contactNo = contactNoController.text
-                              .trim();
-                          final String parentContact = parentContactController
-                              .text
-                              .trim();
-                          final String gender = selectedGender.trim();
-                          final String status = selectedStatus.trim();
-                          final String batchId = (selectedBatchId ?? '').trim();
-                          String batchName = '';
-                          for (final batch in controller.batches) {
-                            if (batch.id == batchId) {
-                              batchName = batch.name;
-                              break;
-                            }
-                          }
+                        onPressed: isSubmitting
+                            ? null
+                            : () async {
+                                final String name = nameController.text.trim();
+                                final String studentId = studentIdController
+                                    .text
+                                    .trim();
+                                final String email = emailController.text
+                                    .trim();
+                                final String contactNo = contactNoController
+                                    .text
+                                    .trim();
+                                final String parentContact =
+                                    parentContactController.text.trim();
+                                final String gender = selectedGender.trim();
+                                final String status = selectedStatus.trim();
+                                final String batchId = (selectedBatchId ?? '')
+                                    .trim();
+                                String batchName = '';
+                                for (final batch in controller.batches) {
+                                  if (batch.id == batchId) {
+                                    batchName = batch.name;
+                                    break;
+                                  }
+                                }
 
-                          if (name.isEmpty ||
-                              gender.isEmpty ||
-                              status.isEmpty ||
-                              batchId.isEmpty ||
-                              batchName.isEmpty) {
-                            return;
-                          }
+                                if (name.isEmpty ||
+                                    gender.isEmpty ||
+                                    status.isEmpty ||
+                                    batchId.isEmpty ||
+                                    batchName.isEmpty) {
+                                  return;
+                                }
 
-                          await onSubmit(
-                            name: name,
-                            studentId: studentId,
-                            email: email,
-                            contactNo: contactNo,
-                            parentContact: parentContact,
-                            gender: gender,
-                            status: status,
-                            batchId: batchId,
-                            batchName: batchName,
-                          );
-                          Navigator.of(context).pop();
-                        },
-                        icon: const Icon(Icons.check_rounded),
-                        label: Text(actionLabel),
+                                setState(() {
+                                  isSubmitting = true;
+                                });
+                                try {
+                                  await onSubmit(
+                                    name: name,
+                                    studentId: studentId,
+                                    email: email,
+                                    contactNo: contactNo,
+                                    parentContact: parentContact,
+                                    gender: gender,
+                                    status: status,
+                                    batchId: batchId,
+                                    batchName: batchName,
+                                  );
+                                  if (context.mounted) {
+                                    Navigator.of(context).pop();
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    await _showSaasDialog(
+                                      context: context,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: <Widget>[
+                                          _dialogHeader(
+                                            icon: Icons.error_outline_rounded,
+                                            title: 'Unable to Save Student',
+                                            subtitle:
+                                                'Please review and try again.',
+                                            accent: AppColors.error,
+                                          ),
+                                          const SizedBox(height: AppSpacing.md),
+                                          Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFFF5F5),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              border: Border.all(
+                                                color: const Color(0xFFF5D0D0),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              '$e'.replaceFirst(
+                                                'Exception: ',
+                                                '',
+                                              ),
+                                              style: const TextStyle(
+                                                color: AppColors.textPrimary,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: AppSpacing.md),
+                                          Align(
+                                            alignment: Alignment.centerRight,
+                                            child: FilledButton(
+                                              onPressed: () =>
+                                                  Navigator.of(context).pop(),
+                                              style: FilledButton.styleFrom(
+                                                backgroundColor:
+                                                    AppColors.error,
+                                              ),
+                                              child: const Text('OK'),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }
+                                } finally {
+                                  if (context.mounted) {
+                                    setState(() {
+                                      isSubmitting = false;
+                                    });
+                                  }
+                                }
+                              },
+                        icon: isSubmitting
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.check_rounded),
+                        label: Text(isSubmitting ? 'Saving...' : actionLabel),
                       ),
                     ],
                   ),
@@ -978,335 +1060,333 @@ class StudentsView extends StatelessWidget {
     await _showSaasDialog(
       context: context,
       child: StatefulBuilder(
-        builder:
-            (BuildContext dialogContext, void Function(void Function()) setState) {
-              Future<void> pickAndPreview() async {
-                setState(() {
-                  isParsing = true;
-                  feedbackText = '';
-                });
-                try {
-                  final FilePickerResult? result = await FilePicker.platform
-                      .pickFiles(
-                        type: FileType.custom,
-                        allowedExtensions: const <String>['csv'],
-                        withData: true,
-                      );
-                  if (result == null || result.files.isEmpty) {
-                    setState(() {
-                      isParsing = false;
-                    });
-                    return;
-                  }
-
-                  final PlatformFile file = result.files.first;
-                  selectedFileName = file.name;
-                  String content = '';
-                  if (file.bytes != null) {
-                    content = utf8.decode(file.bytes!);
-                  } else if ((file.path ?? '').trim().isNotEmpty) {
-                    content = await File(file.path!).readAsString();
-                  }
-                  if (content.trim().isEmpty) {
-                    throw Exception('Selected file is empty.');
-                  }
-
-                  final BulkStudentImportPreview parsed = controller
-                      .previewBulkImport(content);
-                  setState(() {
-                    preview = parsed;
-                    isParsing = false;
-                    feedbackText =
-                        'Parsed ${parsed.totalRows} rows. Valid: ${parsed.validRows}, Invalid: ${parsed.invalidRows}.';
-                  });
-                } catch (e) {
-                  setState(() {
-                    isParsing = false;
-                    preview = null;
-                    feedbackText = '$e';
-                  });
-                }
-              }
-
-              Future<void> runImport() async {
-                final BulkStudentImportPreview? currentPreview = preview;
-                if (currentPreview == null || currentPreview.validRows == 0) {
-                  return;
-                }
-                setState(() {
-                  isImporting = true;
-                  feedbackText = '';
-                });
-                try {
-                  final BulkStudentImportResult result = await controller
-                      .importBulkStudents(
-                        preview: currentPreview,
-                        skipInvalid: true,
-                      );
-                  if (!dialogContext.mounted) {
-                    return;
-                  }
-                  Navigator.of(dialogContext).pop();
-                  await _showSaasDialog(
-                    context: context,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        _dialogHeader(
-                          icon: Icons.check_circle_outline_rounded,
-                          title: 'Bulk Import Completed',
-                          subtitle:
-                              'Imported: ${result.imported} | Skipped: ${result.skipped} | Failed chunks: ${result.failed.length}',
-                          accent: AppColors.success,
-                        ),
-                        if (result.failed.isNotEmpty) ...<Widget>[
-                          const SizedBox(height: AppSpacing.sm),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFF5F5),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: const Color(0xFFF5D0D0)),
-                            ),
-                            child: Text(
-                              result.failed.join('\n'),
-                              style: const TextStyle(
-                                color: AppColors.error,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: AppSpacing.md),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: FilledButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            child: const Text('OK'),
-                          ),
-                        ),
-                      ],
-                    ),
+        builder: (BuildContext dialogContext, void Function(void Function()) setState) {
+          Future<void> pickAndPreview() async {
+            setState(() {
+              isParsing = true;
+              feedbackText = '';
+            });
+            try {
+              final FilePickerResult? result = await FilePicker.platform
+                  .pickFiles(
+                    type: FileType.custom,
+                    allowedExtensions: const <String>['csv'],
+                    withData: true,
                   );
-                } catch (e) {
-                  if (!dialogContext.mounted) {
-                    return;
-                  }
-                  setState(() {
-                    isImporting = false;
-                    feedbackText = '$e';
-                  });
-                }
+              if (result == null || result.files.isEmpty) {
+                setState(() {
+                  isParsing = false;
+                });
+                return;
               }
 
-              return SingleChildScrollView(
+              final PlatformFile file = result.files.first;
+              selectedFileName = file.name;
+              String content = '';
+              if (file.bytes != null) {
+                content = utf8.decode(file.bytes!);
+              } else if ((file.path ?? '').trim().isNotEmpty) {
+                content = await File(file.path!).readAsString();
+              }
+              if (content.trim().isEmpty) {
+                throw Exception('Selected file is empty.');
+              }
+
+              final BulkStudentImportPreview parsed = controller
+                  .previewBulkImport(content);
+              setState(() {
+                preview = parsed;
+                isParsing = false;
+                feedbackText =
+                    'Parsed ${parsed.totalRows} rows. Valid: ${parsed.validRows}, Invalid: ${parsed.invalidRows}.';
+              });
+            } catch (e) {
+              setState(() {
+                isParsing = false;
+                preview = null;
+                feedbackText = '$e';
+              });
+            }
+          }
+
+          Future<void> runImport() async {
+            final BulkStudentImportPreview? currentPreview = preview;
+            if (currentPreview == null || currentPreview.validRows == 0) {
+              return;
+            }
+            setState(() {
+              isImporting = true;
+              feedbackText = '';
+            });
+            try {
+              final BulkStudentImportResult result = await controller
+                  .importBulkStudents(
+                    preview: currentPreview,
+                    skipInvalid: true,
+                  );
+              if (!dialogContext.mounted) {
+                return;
+              }
+              Navigator.of(dialogContext).pop();
+              await _showSaasDialog(
+                context: context,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     _dialogHeader(
-                      icon: Icons.upload_file_rounded,
-                      title: 'Bulk Import Students',
+                      icon: Icons.check_circle_outline_rounded,
+                      title: 'Bulk Import Completed',
                       subtitle:
-                          'Upload CSV, review validation, and import valid rows.',
-                      accent: AppColors.accent,
+                          'Imported: ${result.imported} | Skipped: ${result.skipped} | Failed chunks: ${result.failed.length}',
+                      accent: AppColors.success,
                     ),
-                    const SizedBox(height: AppSpacing.md),
-                    Row(
-                      children: <Widget>[
-                        FilledButton.icon(
-                          onPressed: isParsing || isImporting ? null : pickAndPreview,
-                          icon: isParsing
-                              ? const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.attach_file_rounded),
-                          label: const Text('Choose CSV'),
-                        ),
-                        const SizedBox(width: 10),
-                        OutlinedButton.icon(
-                          onPressed: isImporting || isParsing
-                              ? null
-                              : () => _downloadImportTemplate(context, controller),
-                          icon: const Icon(Icons.download_rounded),
-                          label: const Text('Template'),
-                        ),
-                      ],
-                    ),
-                    if (selectedFileName.trim().isNotEmpty) ...<Widget>[
-                      const SizedBox(height: 8),
-                      Text(
-                        'File: $selectedFileName',
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                    if (feedbackText.trim().isNotEmpty) ...<Widget>[
-                      const SizedBox(height: 8),
+                    if (result.failed.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: AppSpacing.sm),
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFF),
+                          color: const Color(0xFFFFF5F5),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.border),
+                          border: Border.all(color: const Color(0xFFF5D0D0)),
                         ),
                         child: Text(
-                          feedbackText,
+                          result.failed.join('\n'),
                           style: const TextStyle(
-                            color: AppColors.textSecondary,
+                            color: AppColors.error,
                             fontSize: 12,
                           ),
                         ),
                       ),
                     ],
-                    if (preview != null) ...<Widget>[
-                      const SizedBox(height: AppSpacing.md),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: <Widget>[
-                          _pill(
-                            label: 'Total: ${preview!.totalRows}',
-                            background: const Color(0xFFE8EEFF),
-                            foreground: AppColors.accent,
-                          ),
-                          _pill(
-                            label: 'Valid: ${preview!.validRows}',
-                            background: const Color(0xFFDEF7E8),
-                            foreground: const Color(0xFF15803D),
-                          ),
-                          _pill(
-                            label: 'Invalid: ${preview!.invalidRows}',
-                            background: const Color(0xFFFDE7E7),
-                            foreground: const Color(0xFFB42318),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 260),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: preview!.rows.length > 20
-                              ? 20
-                              : preview!.rows.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 6),
-                          itemBuilder: (BuildContext context, int index) {
-                            final BulkStudentImportRow row = preview!.rows[index];
-                            return Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: row.isValid
-                                    ? const Color(0xFFFAFCFF)
-                                    : const Color(0xFFFFF7F7),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: row.isValid
-                                      ? const Color(0xFFE5EAF5)
-                                      : const Color(0xFFF3D1D1),
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  Row(
-                                    children: <Widget>[
-                                      Text(
-                                        'Row ${row.rowNumber}',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      _pill(
-                                        label: row.isValid ? 'Valid' : 'Invalid',
-                                        background: row.isValid
-                                            ? const Color(0xFFDEF7E8)
-                                            : const Color(0xFFFDE7E7),
-                                        foreground: row.isValid
-                                            ? const Color(0xFF15803D)
-                                            : const Color(0xFFB42318),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${row.fullName}  |  ${row.batchName.isEmpty ? '--' : row.batchName}',
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  if (!row.isValid) ...<Widget>[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      row.errors.join(' '),
-                                      style: const TextStyle(
-                                        color: AppColors.error,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      if (preview!.rows.length > 20)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 6),
-                          child: Text(
-                            'Showing first 20 rows only.',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ),
-                    ],
                     const SizedBox(height: AppSpacing.md),
-                    Row(
-                      children: <Widget>[
-                        OutlinedButton(
-                          onPressed: isImporting
-                              ? null
-                              : () => Navigator.of(dialogContext).pop(),
-                          child: const Text('Cancel'),
-                        ),
-                        const Spacer(),
-                        FilledButton.icon(
-                          onPressed:
-                              (preview == null ||
-                                  preview!.validRows == 0 ||
-                                  isImporting ||
-                                  isParsing)
-                              ? null
-                              : runImport,
-                          icon: isImporting
-                              ? const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.upload_rounded),
-                          label: Text(
-                            isImporting
-                                ? 'Importing...'
-                                : 'Import Valid Rows',
-                          ),
-                        ),
-                      ],
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('OK'),
+                      ),
                     ),
                   ],
                 ),
               );
-            },
+            } catch (e) {
+              if (!dialogContext.mounted) {
+                return;
+              }
+              setState(() {
+                isImporting = false;
+                feedbackText = '$e';
+              });
+            }
+          }
+
+          return SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                _dialogHeader(
+                  icon: Icons.upload_file_rounded,
+                  title: 'Bulk Import Students',
+                  subtitle:
+                      'Upload CSV, review validation, and import valid rows.',
+                  accent: AppColors.accent,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  children: <Widget>[
+                    FilledButton.icon(
+                      onPressed: isParsing || isImporting
+                          ? null
+                          : pickAndPreview,
+                      icon: isParsing
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.attach_file_rounded),
+                      label: const Text('Choose CSV'),
+                    ),
+                    const SizedBox(width: 10),
+                    OutlinedButton.icon(
+                      onPressed: isImporting || isParsing
+                          ? null
+                          : () => _downloadImportTemplate(context, controller),
+                      icon: const Icon(Icons.download_rounded),
+                      label: const Text('Template'),
+                    ),
+                  ],
+                ),
+                if (selectedFileName.trim().isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 8),
+                  Text(
+                    'File: $selectedFileName',
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+                if (feedbackText.trim().isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFF),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Text(
+                      feedbackText,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+                if (preview != null) ...<Widget>[
+                  const SizedBox(height: AppSpacing.md),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      _pill(
+                        label: 'Total: ${preview!.totalRows}',
+                        background: const Color(0xFFE8EEFF),
+                        foreground: AppColors.accent,
+                      ),
+                      _pill(
+                        label: 'Valid: ${preview!.validRows}',
+                        background: const Color(0xFFDEF7E8),
+                        foreground: const Color(0xFF15803D),
+                      ),
+                      _pill(
+                        label: 'Invalid: ${preview!.invalidRows}',
+                        background: const Color(0xFFFDE7E7),
+                        foreground: const Color(0xFFB42318),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 260),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: preview!.rows.length > 20
+                          ? 20
+                          : preview!.rows.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 6),
+                      itemBuilder: (BuildContext context, int index) {
+                        final BulkStudentImportRow row = preview!.rows[index];
+                        return Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: row.isValid
+                                ? const Color(0xFFFAFCFF)
+                                : const Color(0xFFFFF7F7),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: row.isValid
+                                  ? const Color(0xFFE5EAF5)
+                                  : const Color(0xFFF3D1D1),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Row(
+                                children: <Widget>[
+                                  Text(
+                                    'Row ${row.rowNumber}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _pill(
+                                    label: row.isValid ? 'Valid' : 'Invalid',
+                                    background: row.isValid
+                                        ? const Color(0xFFDEF7E8)
+                                        : const Color(0xFFFDE7E7),
+                                    foreground: row.isValid
+                                        ? const Color(0xFF15803D)
+                                        : const Color(0xFFB42318),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${row.fullName}  |  ${row.batchName.isEmpty ? '--' : row.batchName}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              if (!row.isValid) ...<Widget>[
+                                const SizedBox(height: 4),
+                                Text(
+                                  row.errors.join(' '),
+                                  style: const TextStyle(
+                                    color: AppColors.error,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  if (preview!.rows.length > 20)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Text(
+                        'Showing first 20 rows only.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                ],
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  children: <Widget>[
+                    OutlinedButton(
+                      onPressed: isImporting
+                          ? null
+                          : () => Navigator.of(dialogContext).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    const Spacer(),
+                    FilledButton.icon(
+                      onPressed:
+                          (preview == null ||
+                              preview!.validRows == 0 ||
+                              isImporting ||
+                              isParsing)
+                          ? null
+                          : runImport,
+                      icon: isImporting
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.upload_rounded),
+                      label: Text(
+                        isImporting ? 'Importing...' : 'Import Valid Rows',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

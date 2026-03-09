@@ -148,7 +148,7 @@ class _MobileLoginPanel extends StatelessWidget {
                     return FilledButton.icon(
                       onPressed: controller.isLoading.value
                           ? null
-                          : controller.login,
+                          : () => controller.login(isMobile: true),
                       icon: Icon(
                         controller.isLoading.value
                             ? Icons.hourglass_top_rounded
@@ -430,7 +430,7 @@ class _LoginPanel extends StatelessWidget {
                   return FilledButton.icon(
                     onPressed: controller.isLoading.value
                         ? null
-                        : controller.login,
+                        : () => controller.login(isMobile: false),
                     icon: Icon(
                       controller.isLoading.value
                           ? Icons.hourglass_top_rounded

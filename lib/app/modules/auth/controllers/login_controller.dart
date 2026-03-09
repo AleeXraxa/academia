@@ -20,7 +20,7 @@ class LoginController extends GetxController {
 
   final RxBool isLoading = false.obs;
 
-  Future<void> login() async {
+  Future<void> login({required bool isMobile}) async {
     if (emailController.text.trim().isEmpty || passwordController.text.isEmpty) {
       await AppMessageDialog.showError(
         title: 'Missing Credentials',
@@ -65,6 +65,17 @@ class LoginController extends GetxController {
       }
 
       final UserRole role = _toRole(user.role);
+      if (role == UserRole.teacher && !isMobile) {
+        await _authService.logout();
+        Get.find<AppSession>().clear();
+        await AppMessageDialog.showError(
+          title: 'Mobile Access Only',
+          message:
+              'Teacher can only use the mobile app for attendance. Please login from the mobile app.',
+        );
+        return;
+      }
+
       Get.find<AppSession>().setRole(role);
       if (role == UserRole.teacher) {
         Get.offAllNamed(AppRoutes.attendance);

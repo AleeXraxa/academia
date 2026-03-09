@@ -44,6 +44,10 @@ class AttendanceController extends GetxController {
   final RxString selectedBatchName = ''.obs;
   final RxString presentCountInput = ''.obs;
   final RxString errorText = ''.obs;
+  final RxMap<String, TeacherAttendanceDraft> teacherDrafts =
+      <String, TeacherAttendanceDraft>{}.obs;
+  final RxMap<String, QueuedTeacherSubmission> queuedTeacherSubmissions =
+      <String, QueuedTeacherSubmission>{}.obs;
 
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _batchesSubscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _todaySubscription;
@@ -182,6 +186,233 @@ class AttendanceController extends GetxController {
           (BatchModel batch) => (batch.teacherId ?? '').trim() == teacherUid,
         )
         .toList();
+  }
+
+  List<AdminAttendanceSession> get teacherOpenSessionsToday {
+    if (!Get.find<AppSession>().isTeacher) {
+      return <AdminAttendanceSession>[];
+    }
+    final List<AdminAttendanceSession> open = todaySessions.where((
+      AdminAttendanceSession session,
+    ) {
+      final String normalized = session.status.trim().toLowerCase();
+      return !session.teacherSubmitted &&
+          (normalized == 'open' || normalized == 'active');
+    }).toList();
+    open.sort((AdminAttendanceSession a, AdminAttendanceSession b) {
+      return a.batchName.toLowerCase().compareTo(b.batchName.toLowerCase());
+    });
+    return open;
+  }
+
+  List<AdminAttendanceSession> get teacherTaskFirstTodaySessions {
+    final List<AdminAttendanceSession> sessions = todaySessions.toList();
+    sessions.sort((AdminAttendanceSession a, AdminAttendanceSession b) {
+      final int ap = (a.teacherSubmitted || !_isOpen(a.status)) ? 1 : 0;
+      final int bp = (b.teacherSubmitted || !_isOpen(b.status)) ? 1 : 0;
+      if (ap != bp) {
+        return ap.compareTo(bp);
+      }
+      return a.batchName.toLowerCase().compareTo(b.batchName.toLowerCase());
+    });
+    return sessions;
+  }
+
+  int get teacherTodayAssignedSessions => todaySessions.length;
+  int get teacherTodaySubmittedSessions =>
+      todaySessions.where((AdminAttendanceSession s) => s.teacherSubmitted).length;
+  int get teacherTodayPendingSessions =>
+      (teacherTodayAssignedSessions - teacherTodaySubmittedSessions).clamp(0, 1000000);
+
+  List<AdminAttendanceSession> get teacherRecentSubmittedSessions {
+    final List<AdminAttendanceSession> submitted = historySessions.where((
+      AdminAttendanceSession session,
+    ) {
+      return session.teacherSubmitted;
+    }).toList();
+    submitted.sort((AdminAttendanceSession a, AdminAttendanceSession b) {
+      final DateTime ad =
+          a.date ??
+          DateTime.tryParse('${a.dateKey} 00:00:00') ??
+          DateTime(2000, 1, 1);
+      final DateTime bd =
+          b.date ??
+          DateTime.tryParse('${b.dateKey} 00:00:00') ??
+          DateTime(2000, 1, 1);
+      return bd.compareTo(ad);
+    });
+    return submitted.take(7).toList();
+  }
+
+  double get teacherLast5DaysSubmissionRate {
+    final DateTime today = DateTime.now();
+    final DateTime start = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).subtract(const Duration(days: 4));
+    final List<AdminAttendanceSession> window = historySessions.where((
+      AdminAttendanceSession session,
+    ) {
+      final DateTime date =
+          session.date ??
+          DateTime.tryParse('${session.dateKey} 00:00:00') ??
+          DateTime(2000, 1, 1);
+      return !date.isBefore(start);
+    }).toList();
+    if (window.isEmpty) {
+      return 0;
+    }
+    final int submitted = window.where((AdminAttendanceSession s) {
+      return s.teacherSubmitted;
+    }).length;
+    return (submitted / window.length) * 100;
+  }
+
+  double get teacherLast5DaysAverageAttendance {
+    final DateTime today = DateTime.now();
+    final DateTime start = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).subtract(const Duration(days: 4));
+    final List<AdminAttendanceSession> window = historySessions.where((
+      AdminAttendanceSession session,
+    ) {
+      final DateTime date =
+          session.date ??
+          DateTime.tryParse('${session.dateKey} 00:00:00') ??
+          DateTime(2000, 1, 1);
+      return !date.isBefore(start) && session.totalStudents > 0;
+    }).toList();
+    if (window.isEmpty) {
+      return 0;
+    }
+    final double totalPercent = window.fold<double>(0, (
+      double sum,
+      AdminAttendanceSession session,
+    ) {
+      return sum +
+          ((session.presentCount + session.leaveCount) / session.totalStudents) *
+              100;
+    });
+    return totalPercent / window.length;
+  }
+
+  int get teacherOnTimeSubmissionStreakDays {
+    final Map<String, List<AdminAttendanceSession>> byDate =
+        <String, List<AdminAttendanceSession>>{};
+    for (final AdminAttendanceSession session in historySessions) {
+      byDate.putIfAbsent(session.dateKey, () => <AdminAttendanceSession>[]).add(
+        session,
+      );
+    }
+    if (byDate.isEmpty) {
+      return 0;
+    }
+
+    final List<DateTime> dates = byDate.keys
+        .map((String key) => DateTime.tryParse('$key 00:00:00'))
+        .whereType<DateTime>()
+        .toList()
+      ..sort((DateTime a, DateTime b) => b.compareTo(a));
+
+    int streak = 0;
+    for (final DateTime date in dates) {
+      final String key =
+          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      final List<AdminAttendanceSession> sessions = byDate[key] ?? <AdminAttendanceSession>[];
+      if (sessions.isEmpty) {
+        continue;
+      }
+      final bool allSubmitted = sessions.every((AdminAttendanceSession session) {
+        return session.teacherSubmitted;
+      });
+      if (!allSubmitted) {
+        break;
+      }
+      streak += 1;
+    }
+    return streak;
+  }
+
+  bool hasTeacherDraft(String sessionId) {
+    return teacherDrafts.containsKey(sessionId.trim());
+  }
+
+  TeacherAttendanceDraft draftForSession(String sessionId) {
+    return teacherDrafts[sessionId.trim()] ?? TeacherAttendanceDraft.empty();
+  }
+
+  void cacheTeacherDraft({
+    required String sessionId,
+    required List<String> presentStudentIds,
+    required List<String> leaveStudentIds,
+    String search = '',
+    String filter = 'all',
+  }) {
+    final String id = sessionId.trim();
+    if (id.isEmpty) {
+      return;
+    }
+    teacherDrafts[id] = TeacherAttendanceDraft(
+      presentStudentIds: presentStudentIds,
+      leaveStudentIds: leaveStudentIds,
+      search: search,
+      filter: filter,
+      updatedAt: DateTime.now(),
+    );
+    teacherDrafts.refresh();
+  }
+
+  void clearTeacherDraft(String sessionId) {
+    teacherDrafts.remove(sessionId.trim());
+    teacherDrafts.refresh();
+  }
+
+  bool isQueuedTeacherSubmission(String sessionId) {
+    return queuedTeacherSubmissions.containsKey(sessionId.trim());
+  }
+
+  int get queuedTeacherSubmissionCount => queuedTeacherSubmissions.length;
+
+  void queueTeacherSubmission({
+    required String sessionId,
+    required List<String> presentStudentIds,
+    required List<String> leaveStudentIds,
+    required List<String> absentStudentIds,
+    required String reason,
+  }) {
+    final String id = sessionId.trim();
+    if (id.isEmpty) {
+      return;
+    }
+    queuedTeacherSubmissions[id] = QueuedTeacherSubmission(
+      sessionId: id,
+      presentStudentIds: presentStudentIds,
+      leaveStudentIds: leaveStudentIds,
+      absentStudentIds: absentStudentIds,
+      reason: reason,
+      queuedAt: DateTime.now(),
+    );
+    queuedTeacherSubmissions.refresh();
+  }
+
+  Future<void> retryQueuedTeacherSubmission(String sessionId) async {
+    final String id = sessionId.trim();
+    final QueuedTeacherSubmission? queued = queuedTeacherSubmissions[id];
+    if (queued == null) {
+      return;
+    }
+    await _submitTeacherAttendanceInternal(
+      sessionId: queued.sessionId,
+      presentStudentIds: queued.presentStudentIds,
+      leaveStudentIds: queued.leaveStudentIds,
+      absentStudentIds: queued.absentStudentIds,
+    );
+    queuedTeacherSubmissions.remove(id);
+    queuedTeacherSubmissions.refresh();
+    clearTeacherDraft(id);
   }
 
   List<AdminAttendanceSession> get filteredHistorySessions {
@@ -423,7 +654,11 @@ class AttendanceController extends GetxController {
 
     isSaving.value = true;
     try {
-      final String docId = '${todayKey}_$batchId';
+      final String docId = _sessionDocIdForBatch(
+        dateKey: todayKey,
+        batchId: batchId,
+        batchName: batchName,
+      );
       final DocumentSnapshot<Map<String, dynamic>> existing =
           await _attendanceService.getSession(docId);
       if (existing.exists) {
@@ -514,7 +749,11 @@ class AttendanceController extends GetxController {
 
       for (final String batchId in selectedIds) {
         final BatchModel batch = byId[batchId]!;
-        final String docId = '${todayKey}_$batchId';
+        final String docId = _sessionDocIdForBatch(
+          dateKey: todayKey,
+          batchId: batchId,
+          batchName: batch.name,
+        );
         final DocumentSnapshot<Map<String, dynamic>> existing =
             await _attendanceService.getSession(docId);
         if (existing.exists) {
@@ -536,7 +775,12 @@ class AttendanceController extends GetxController {
           0,
           1000000,
         );
-        sessionsPayload['${todayKey}_$batchId'] = <String, dynamic>{
+        final String docId = _sessionDocIdForBatch(
+          dateKey: todayKey,
+          batchId: batchId,
+          batchName: batch.name,
+        );
+        sessionsPayload[docId] = <String, dynamic>{
           'dateKey': todayKey,
           'date': Timestamp.fromDate(
             DateTime(
@@ -565,6 +809,28 @@ class AttendanceController extends GetxController {
     }
   }
 
+  String _sessionDocIdForBatch({
+    required String dateKey,
+    required String batchId,
+    required String batchName,
+  }) {
+    final String normalizedDate = dateKey.trim();
+    final String normalizedBatchName = _slug(batchName);
+    if (normalizedBatchName.isNotEmpty) {
+      return '${normalizedDate}_$normalizedBatchName';
+    }
+    return '${normalizedDate}_${_slug(batchId)}';
+  }
+
+  String _slug(String input) {
+    final String lower = input.trim().toLowerCase();
+    if (lower.isEmpty) {
+      return '';
+    }
+    final String cleaned = lower.replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+    return cleaned.replaceAll(RegExp(r'^_+|_+$'), '');
+  }
+
   Future<List<StudentModel>> fetchStudentsForBatch(String batchId) async {
     return _attendanceService.fetchStudentsForBatch(batchId);
   }
@@ -581,33 +847,106 @@ class AttendanceController extends GetxController {
     required List<String> leaveStudentIds,
     required List<String> absentStudentIds,
   }) async {
+    await _submitTeacherAttendanceInternal(
+      sessionId: sessionId,
+      presentStudentIds: presentStudentIds,
+      leaveStudentIds: leaveStudentIds,
+      absentStudentIds: absentStudentIds,
+    );
+  }
+
+  Future<void> _submitTeacherAttendanceInternal({
+    required String sessionId,
+    required List<String> presentStudentIds,
+    required List<String> leaveStudentIds,
+    required List<String> absentStudentIds,
+  }) async {
     final DocumentSnapshot<Map<String, dynamic>> sessionSnapshot =
         await _attendanceService.getSession(sessionId);
+    if (!sessionSnapshot.exists) {
+      throw Exception('Session not found.');
+    }
     final Map<String, dynamic> sessionMap =
         sessionSnapshot.data() ?? <String, dynamic>{};
+    final String batchId = (sessionMap['batchId'] as String? ?? '').trim();
+    final String status = (sessionMap['status'] as String? ?? '')
+        .trim()
+        .toLowerCase();
+    final bool alreadySubmitted =
+        (sessionMap['teacherSubmitted'] as bool?) ?? false;
+    final int expectedPresentTarget = _toInt(sessionMap['presentCount']);
+    final String uid = (_auth.currentUser?.uid ?? '').trim();
+
+    if (uid.isEmpty) {
+      throw Exception('Authentication required.');
+    }
+    if (batchId.isEmpty) {
+      throw Exception('Invalid session batch.');
+    }
+    if (_teacherIdForBatch(batchId) != uid) {
+      throw Exception('You are not authorized to submit this session.');
+    }
+    if (!(status == 'open' || status == 'active')) {
+      throw Exception('This session is no longer open for submission.');
+    }
+    if (alreadySubmitted) {
+      throw Exception('Attendance already submitted for this session.');
+    }
+
+    final List<StudentModel> batchStudents = await fetchStudentsForBatch(batchId);
+    final Set<String> allowedIds = batchStudents
+        .map((StudentModel student) => student.id.trim())
+        .where((String id) => id.isNotEmpty)
+        .toSet();
+    if (allowedIds.isEmpty) {
+      throw Exception('No students found for this batch.');
+    }
+
+    final Set<String> presentIds = presentStudentIds
+        .map((String id) => id.trim())
+        .where((String id) => id.isNotEmpty)
+        .toSet();
+    final Set<String> leaveIds = leaveStudentIds
+        .map((String id) => id.trim())
+        .where((String id) => id.isNotEmpty)
+        .toSet();
+
+    if (presentIds.any((String id) => !allowedIds.contains(id)) ||
+        leaveIds.any((String id) => !allowedIds.contains(id))) {
+      throw Exception('Attendance contains students outside assigned batch.');
+    }
+    if (presentIds.any((String id) => leaveIds.contains(id))) {
+      throw Exception('A student cannot be both present and on leave.');
+    }
+    if (expectedPresentTarget > 0 && presentIds.length > expectedPresentTarget) {
+      throw Exception(
+        'Present selection cannot exceed target ($expectedPresentTarget).',
+      );
+    }
+
     final Object? totalRaw = sessionMap['totalStudents'];
     final int totalStudents = totalRaw is int
         ? totalRaw
         : int.tryParse('$totalRaw') ?? 0;
-    final int presentCount = presentStudentIds.length;
-    final int leaveCount = leaveStudentIds.length;
+    final int presentCount = presentIds.length;
+    final int leaveCount = leaveIds.length;
+    final List<String> normalizedAbsentStudentIds = allowedIds
+        .where((String id) => !presentIds.contains(id) && !leaveIds.contains(id))
+        .toList();
     final int computedAbsentCount = (totalStudents - presentCount - leaveCount)
         .clamp(0, 1000000);
-    final List<String> normalizedAbsentStudentIds =
-        absentStudentIds.length <= computedAbsentCount
-        ? absentStudentIds
-        : absentStudentIds.take(computedAbsentCount).toList();
 
-    final String uid = _auth.currentUser?.uid ?? '';
     await _attendanceService.updateSession(
       sessionId: sessionId,
       data: <String, dynamic>{
         'presentCount': presentCount,
         'leaveCount': leaveCount,
         'absentCount': computedAbsentCount,
-        'presentStudentIds': presentStudentIds,
-        'leaveStudentIds': leaveStudentIds,
-        'absentStudentIds': normalizedAbsentStudentIds,
+        'presentStudentIds': presentIds.toList(),
+        'leaveStudentIds': leaveIds.toList(),
+        'absentStudentIds': normalizedAbsentStudentIds
+            .take(computedAbsentCount)
+            .toList(),
         'teacherMarkedBy': uid,
         'teacherMarkedAt': FieldValue.serverTimestamp(),
         'teacherSubmitted': true,
@@ -615,6 +954,18 @@ class AttendanceController extends GetxController {
         'updatedAt': FieldValue.serverTimestamp(),
       },
     );
+  }
+
+  bool _isOpen(String status) {
+    final String normalized = status.trim().toLowerCase();
+    return normalized == 'open' || normalized == 'active';
+  }
+
+  int _toInt(Object? value) {
+    if (value is int) {
+      return value;
+    }
+    return int.tryParse('$value') ?? 0;
   }
 
   Future<void> adminCorrectSession({
@@ -724,7 +1075,9 @@ class AttendanceController extends GetxController {
             ..clear()
             ..addAll(mapped);
           _applySessionVisibility();
-        }, onError: (_) {});
+        }, onError: (_) {
+          errorText.value = 'Unable to load today sessions.';
+        });
   }
 
   void _listenHistorySessions() {
@@ -742,7 +1095,9 @@ class AttendanceController extends GetxController {
             ..clear()
             ..addAll(mapped);
           _applySessionVisibility();
-        }, onError: (_) {});
+        }, onError: (_) {
+          errorText.value = 'Unable to load attendance history.';
+        });
   }
 
   void _prepareGenerationState() {
@@ -999,4 +1354,48 @@ class HistoryTeacherOption {
 
   final String id;
   final String name;
+}
+
+class TeacherAttendanceDraft {
+  const TeacherAttendanceDraft({
+    required this.presentStudentIds,
+    required this.leaveStudentIds,
+    required this.search,
+    required this.filter,
+    required this.updatedAt,
+  });
+
+  factory TeacherAttendanceDraft.empty() {
+    return TeacherAttendanceDraft(
+      presentStudentIds: const <String>[],
+      leaveStudentIds: const <String>[],
+      search: '',
+      filter: 'all',
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
+    );
+  }
+
+  final List<String> presentStudentIds;
+  final List<String> leaveStudentIds;
+  final String search;
+  final String filter;
+  final DateTime updatedAt;
+}
+
+class QueuedTeacherSubmission {
+  const QueuedTeacherSubmission({
+    required this.sessionId,
+    required this.presentStudentIds,
+    required this.leaveStudentIds,
+    required this.absentStudentIds,
+    required this.reason,
+    required this.queuedAt,
+  });
+
+  final String sessionId;
+  final List<String> presentStudentIds;
+  final List<String> leaveStudentIds;
+  final List<String> absentStudentIds;
+  final String reason;
+  final DateTime queuedAt;
 }

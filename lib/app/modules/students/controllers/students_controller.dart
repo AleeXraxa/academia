@@ -117,10 +117,13 @@ class StudentsController extends GetxController {
       }
 
       hasChanges = true;
-      writer.update(_firestore.collection('batches').doc(batch.id), <String, dynamic>{
-        'studentsCount': expected,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      writer.update(
+        _firestore.collection('batches').doc(batch.id),
+        <String, dynamic>{
+          'studentsCount': expected,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+      );
     }
 
     if (hasChanges) {
@@ -139,10 +142,13 @@ class StudentsController extends GetxController {
     required String batchId,
     required String batchName,
   }) async {
-    final DocumentReference<Map<String, dynamic>> studentDoc =
-        _firestore.collection('students').doc();
-    final DocumentReference<Map<String, dynamic>> batchDoc =
-        _firestore.collection('batches').doc(batchId.trim());
+    await _ensureUniqueStudentId(studentId: studentId, excludeDocId: null);
+    final DocumentReference<Map<String, dynamic>> studentDoc = _firestore
+        .collection('students')
+        .doc();
+    final DocumentReference<Map<String, dynamic>> batchDoc = _firestore
+        .collection('batches')
+        .doc(batchId.trim());
 
     final WriteBatch batch = _firestore.batch();
     batch.set(studentDoc, <String, dynamic>{
@@ -182,6 +188,10 @@ class StudentsController extends GetxController {
         .map((String value) => _normalizeHeader(value))
         .toList();
     final List<BulkStudentImportRow> parsedRows = <BulkStudentImportRow>[];
+    final Set<String> existingStudentIds = students
+        .map((StudentModel s) => (s.studentId ?? '').trim().toLowerCase())
+        .where((String id) => id.isNotEmpty)
+        .toSet();
 
     for (int i = 1; i < rows.length; i++) {
       final List<String> row = rows[i];
@@ -224,6 +234,10 @@ class StudentsController extends GetxController {
       if (fullName.isEmpty) {
         errors.add('Full Name is required.');
       }
+      if (studentId.isNotEmpty &&
+          existingStudentIds.contains(studentId.toLowerCase())) {
+        errors.add('StudentID already exists.');
+      }
       if (email.isNotEmpty && !_isValidEmail(email)) {
         errors.add('Invalid email format.');
       }
@@ -232,18 +246,15 @@ class StudentsController extends GetxController {
         batchId: batchIdRaw,
         batchName: batchNameRaw,
       );
-      if ((batchIdRaw.isEmpty && batchNameRaw.isEmpty) || matchedBatch == null) {
+      if ((batchIdRaw.isEmpty && batchNameRaw.isEmpty) ||
+          matchedBatch == null) {
         errors.add('Batch not found. Provide valid batchId or batchName.');
       }
 
       final String statusNormalized = statusRaw.isEmpty
           ? 'active'
           : statusRaw.toLowerCase();
-      const Set<String> allowedStatus = <String>{
-        'active',
-        'completed',
-        'drop',
-      };
+      const Set<String> allowedStatus = <String>{'active', 'completed', 'drop'};
       if (!allowedStatus.contains(statusNormalized)) {
         errors.add('Status must be active, completed, or drop.');
       }
@@ -277,6 +288,38 @@ class StudentsController extends GetxController {
       );
     }
 
+    final Map<String, int> duplicateCounter = <String, int>{};
+    for (final BulkStudentImportRow row in parsedRows) {
+      final String normalized = row.studentId.trim().toLowerCase();
+      if (normalized.isEmpty) {
+        continue;
+      }
+      duplicateCounter[normalized] = (duplicateCounter[normalized] ?? 0) + 1;
+    }
+    for (int i = 0; i < parsedRows.length; i++) {
+      final BulkStudentImportRow row = parsedRows[i];
+      final String normalized = row.studentId.trim().toLowerCase();
+      if (normalized.isNotEmpty && (duplicateCounter[normalized] ?? 0) > 1) {
+        final List<String> updatedErrors = <String>[
+          ...row.errors,
+          'StudentID is duplicated in CSV.',
+        ];
+        parsedRows[i] = BulkStudentImportRow(
+          rowNumber: row.rowNumber,
+          fullName: row.fullName,
+          studentId: row.studentId,
+          email: row.email,
+          contactNo: row.contactNo,
+          parentContact: row.parentContact,
+          gender: row.gender,
+          status: row.status,
+          batchId: row.batchId,
+          batchName: row.batchName,
+          errors: updatedErrors,
+        );
+      }
+    }
+
     return BulkStudentImportPreview(rows: parsedRows);
   }
 
@@ -298,20 +341,51 @@ class StudentsController extends GetxController {
       throw Exception('No valid rows to import.');
     }
 
-    int imported = 0;
+    final Set<String> existingIds = students
+        .map((StudentModel s) => (s.studentId ?? '').trim().toLowerCase())
+        .where((String id) => id.isNotEmpty)
+        .toSet();
+    final Set<String> seenImportIds = <String>{};
+    final List<BulkStudentImportRow> importableRows = <BulkStudentImportRow>[];
     final List<String> failed = <String>[];
+
+    for (final BulkStudentImportRow row in validRows) {
+      final String normalized = row.studentId.trim().toLowerCase();
+      if (normalized.isNotEmpty && existingIds.contains(normalized)) {
+        failed.add(
+          'Row ${row.rowNumber}: StudentID "${row.studentId}" already exists.',
+        );
+        continue;
+      }
+      if (normalized.isNotEmpty && seenImportIds.contains(normalized)) {
+        failed.add(
+          'Row ${row.rowNumber}: StudentID "${row.studentId}" duplicated in import.',
+        );
+        continue;
+      }
+      if (normalized.isNotEmpty) {
+        seenImportIds.add(normalized);
+      }
+      importableRows.add(row);
+    }
+
+    int imported = 0;
     const int chunkSize = 380;
 
-    for (int start = 0; start < validRows.length; start += chunkSize) {
-      final int end = (start + chunkSize) > validRows.length
-          ? validRows.length
+    for (int start = 0; start < importableRows.length; start += chunkSize) {
+      final int end = (start + chunkSize) > importableRows.length
+          ? importableRows.length
           : start + chunkSize;
-      final List<BulkStudentImportRow> chunk = validRows.sublist(start, end);
+      final List<BulkStudentImportRow> chunk = importableRows.sublist(
+        start,
+        end,
+      );
       final WriteBatch writeBatch = _firestore.batch();
 
       for (final BulkStudentImportRow row in chunk) {
-        final DocumentReference<Map<String, dynamic>> doc =
-            _firestore.collection('students').doc();
+        final DocumentReference<Map<String, dynamic>> doc = _firestore
+            .collection('students')
+            .doc();
         writeBatch.set(doc, <String, dynamic>{
           'name': row.fullName,
           'studentId': row.studentId,
@@ -339,7 +413,9 @@ class StudentsController extends GetxController {
     return BulkStudentImportResult(
       total: preview.totalRows,
       imported: imported,
-      skipped: skipInvalid ? invalidRows.length : 0,
+      skipped: skipInvalid
+          ? invalidRows.length + (validRows.length - importableRows.length)
+          : (validRows.length - importableRows.length),
       failed: failed,
     );
   }
@@ -357,7 +433,10 @@ class StudentsController extends GetxController {
     await _syncBatchStudentCounts(mapped);
   }
 
-  BatchModel? _matchBatch({required String batchId, required String batchName}) {
+  BatchModel? _matchBatch({
+    required String batchId,
+    required String batchName,
+  }) {
     final String normalizedId = batchId.trim();
     if (normalizedId.isNotEmpty) {
       for (final BatchModel batch in batches) {
@@ -450,11 +529,14 @@ class StudentsController extends GetxController {
     required String batchId,
     required String batchName,
   }) async {
-    final DocumentReference<Map<String, dynamic>> studentDoc =
-        _firestore.collection('students').doc(id);
-    final DocumentSnapshot<Map<String, dynamic>> before = await studentDoc.get();
-    final String previousBatchId =
-        (before.data()?['batchId'] as String? ?? '').trim();
+    await _ensureUniqueStudentId(studentId: studentId, excludeDocId: id);
+    final DocumentReference<Map<String, dynamic>> studentDoc = _firestore
+        .collection('students')
+        .doc(id);
+    final DocumentSnapshot<Map<String, dynamic>> before = await studentDoc
+        .get();
+    final String previousBatchId = (before.data()?['batchId'] as String? ?? '')
+        .trim();
     final String nextBatchId = batchId.trim();
 
     final WriteBatch batch = _firestore.batch();
@@ -472,9 +554,8 @@ class StudentsController extends GetxController {
     });
 
     if (previousBatchId.isNotEmpty && previousBatchId != nextBatchId) {
-      final DocumentReference<Map<String, dynamic>> previousBatchDoc = _firestore
-          .collection('batches')
-          .doc(previousBatchId);
+      final DocumentReference<Map<String, dynamic>> previousBatchDoc =
+          _firestore.collection('batches').doc(previousBatchId);
       batch.update(previousBatchDoc, <String, dynamic>{
         'studentsCount': FieldValue.increment(-1),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -482,8 +563,9 @@ class StudentsController extends GetxController {
     }
 
     if (nextBatchId.isNotEmpty && previousBatchId != nextBatchId) {
-      final DocumentReference<Map<String, dynamic>> nextBatchDoc =
-          _firestore.collection('batches').doc(nextBatchId);
+      final DocumentReference<Map<String, dynamic>> nextBatchDoc = _firestore
+          .collection('batches')
+          .doc(nextBatchId);
       batch.update(nextBatchDoc, <String, dynamic>{
         'studentsCount': FieldValue.increment(1),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -493,17 +575,65 @@ class StudentsController extends GetxController {
     await batch.commit();
   }
 
+  Future<void> _ensureUniqueStudentId({
+    required String? studentId,
+    required String? excludeDocId,
+  }) async {
+    final String normalized = (studentId ?? '').trim();
+    if (normalized.isEmpty) {
+      return;
+    }
+    final String lower = normalized.toLowerCase();
+    for (final StudentModel student in students) {
+      if (excludeDocId != null && student.id == excludeDocId) {
+        continue;
+      }
+      final String existing = (student.studentId ?? '').trim().toLowerCase();
+      if (existing.isNotEmpty && existing == lower) {
+        throw Exception(
+          'StudentID "$normalized" already exists. Please use a unique StudentID.',
+        );
+      }
+    }
+
+    final QuerySnapshot<Map<String, dynamic>> snap = await _firestore
+        .collection('students')
+        .where('studentId', isEqualTo: normalized)
+        .limit(2)
+        .get();
+    if (snap.docs.isEmpty) {
+      return;
+    }
+    if (excludeDocId != null &&
+        snap.docs.length == 1 &&
+        snap.docs.first.id == excludeDocId) {
+      return;
+    }
+    final bool hasOther = snap.docs.any(
+      (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
+          excludeDocId == null || doc.id != excludeDocId,
+    );
+    if (hasOther) {
+      throw Exception(
+        'StudentID "$normalized" already exists. Please use a unique StudentID.',
+      );
+    }
+  }
+
   Future<void> deleteStudent(String id) async {
-    final DocumentReference<Map<String, dynamic>> studentDoc =
-        _firestore.collection('students').doc(id);
-    final DocumentSnapshot<Map<String, dynamic>> before = await studentDoc.get();
+    final DocumentReference<Map<String, dynamic>> studentDoc = _firestore
+        .collection('students')
+        .doc(id);
+    final DocumentSnapshot<Map<String, dynamic>> before = await studentDoc
+        .get();
     final String batchId = (before.data()?['batchId'] as String? ?? '').trim();
 
     final WriteBatch batch = _firestore.batch();
     batch.delete(studentDoc);
     if (batchId.isNotEmpty) {
-      final DocumentReference<Map<String, dynamic>> batchDoc =
-          _firestore.collection('batches').doc(batchId);
+      final DocumentReference<Map<String, dynamic>> batchDoc = _firestore
+          .collection('batches')
+          .doc(batchId);
       batch.update(batchDoc, <String, dynamic>{
         'studentsCount': FieldValue.increment(-1),
         'updatedAt': FieldValue.serverTimestamp(),

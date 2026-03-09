@@ -6,6 +6,7 @@ import 'package:academia/app/core/session/app_session.dart';
 import 'package:academia/app/data/repositories/auth_repository.dart';
 import 'package:academia/app/routes/app_routes.dart';
 import 'package:academia/app/services/auth_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -73,6 +74,11 @@ class _SplashViewState extends State<SplashView>
       }
 
       final UserRole role = _toRole(user.role);
+      if (role == UserRole.teacher && !_isMobilePlatform()) {
+        await _authService.logout();
+        Get.find<AppSession>().clear();
+        return AppRoutes.login;
+      }
       Get.find<AppSession>().setRole(role);
       if (role == UserRole.teacher) {
         return AppRoutes.attendance;
@@ -101,6 +107,22 @@ class _SplashViewState extends State<SplashView>
         return UserRole.teacher;
       default:
         return UserRole.staff;
+    }
+  }
+
+  bool _isMobilePlatform() {
+    if (kIsWeb) {
+      return false;
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+      case TargetPlatform.iOS:
+        return true;
+      case TargetPlatform.fuchsia:
+      case TargetPlatform.linux:
+      case TargetPlatform.macOS:
+      case TargetPlatform.windows:
+        return false;
     }
   }
 

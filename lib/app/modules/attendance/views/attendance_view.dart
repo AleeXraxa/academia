@@ -17,6 +17,9 @@ import 'package:get/get.dart';
 const Duration _kFastMotion = Duration(milliseconds: 160);
 const Duration _kBaseMotion = Duration(milliseconds: 220);
 const Duration _kEnterMotion = Duration(milliseconds: 280);
+const double _kMobileRadius = 14;
+const double _kMobileButtonHeight = 42;
+const double _kMobileGap = 10;
 
 class AttendanceView extends StatelessWidget {
   const AttendanceView({super.key});
@@ -140,23 +143,64 @@ class AttendanceView extends StatelessWidget {
           foregroundColor: AppColors.textPrimary,
         ),
         body: SafeArea(
-          child: IndexedStack(
-            index: tabIndex,
+          child: Column(
             children: <Widget>[
-              _teacherDashboardBody(controller),
-              _teacherTabBackground(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  child: _attendanceBody(
-                    context,
-                    controller,
-                    isMobile: true,
-                    isTeacher: true,
+              if (controller.queuedTeacherSubmissionCount > 0)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  color: const Color(0xFFFFF3DC),
+                  child: Row(
+                    children: <Widget>[
+                      const Icon(
+                        Icons.cloud_off_rounded,
+                        size: 16,
+                        color: Color(0xFF9A3412),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${controller.queuedTeacherSubmissionCount} submissions queued. Retry when internet is stable.',
+                          style: const TextStyle(
+                            color: Color(0xFF9A3412),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: _kBaseMotion,
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  child: IndexedStack(
+                    key: ValueKey<int>(tabIndex),
+                    index: tabIndex,
+                    children: <Widget>[
+                      _teacherDashboardBody(context, controller),
+                      _teacherTabBackground(
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          child: _attendanceBody(
+                            context,
+                            controller,
+                            isMobile: true,
+                            isTeacher: true,
+                          ),
+                        ),
+                      ),
+                      _teacherHistoryBody(context, controller),
+                      _teacherProfileBody(context, controller),
+                    ],
                   ),
                 ),
               ),
-              _teacherHistoryBody(context, controller),
-              _teacherProfileBody(context, controller),
             ],
           ),
         ),
@@ -292,8 +336,27 @@ class AttendanceView extends StatelessWidget {
     );
   }
 
-  Widget _teacherDashboardBody(AttendanceController controller) {
-    final int totalSessions = controller.todaySessions.length;
+  Widget _teacherDashboardBody(
+    BuildContext context,
+    AttendanceController controller,
+  ) {
+    if (controller.isLoading.value) {
+      return _teacherTabBackground(
+        child: ListView(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          children: <Widget>[
+            _mobileCardSkeleton(height: 150),
+            const SizedBox(height: 12),
+            _mobileCardSkeleton(height: 210),
+            const SizedBox(height: 12),
+            _mobileCardSkeleton(height: 210),
+          ],
+        ),
+      );
+    }
+    final int totalSessions = controller.teacherTodayAssignedSessions;
+    final int totalPending = controller.teacherTodayPendingSessions;
+    final int totalSubmitted = controller.teacherTodaySubmittedSessions;
     final int totalPresent = controller.todaySessions.fold<int>(
       0,
       (int sum, AdminAttendanceSession session) => sum + session.presentCount,
@@ -306,42 +369,325 @@ class AttendanceView extends StatelessWidget {
       0,
       (int sum, AdminAttendanceSession session) => sum + session.absentCount,
     );
+    final List<AdminAttendanceSession> pendingSessions =
+        controller.teacherOpenSessionsToday;
+    final List<AdminAttendanceSession> recentTimeline =
+        controller.teacherRecentSubmittedSessions;
     return _teacherTabBackground(
       child: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: <Widget>[
-          _topSummaryCard(controller, isMobile: true),
-          const SizedBox(height: AppSpacing.md),
-          _teacherSectionCard(
-            title: 'Today Snapshot',
-            subtitle: 'Quick attendance counters for current day.',
-            child: Column(
-              children: <Widget>[
-                _dashboardStatCard(
-                  'Today Sessions',
-                  '$totalSessions',
-                  Icons.event,
-                ),
-                const SizedBox(height: 10),
-                _dashboardStatCard(
-                  'Present Students',
-                  '$totalPresent',
-                  Icons.check_circle_rounded,
-                ),
-                const SizedBox(height: 10),
-                _dashboardStatCard(
-                  'Leave Students',
-                  '$totalLeave',
-                  Icons.time_to_leave_rounded,
-                ),
-                const SizedBox(height: 10),
-                _dashboardStatCard(
-                  'Absent Students',
-                  '$totalAbsent',
-                  Icons.cancel_rounded,
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: <Color>[
+                  Color(0xFF0F3AA9),
+                  Color(0xFF1E4ED8),
+                  Color(0xFF2F5DFF),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const <BoxShadow>[
+                BoxShadow(
+                  color: Color(0x331D4ED8),
+                  blurRadius: 24,
+                  offset: Offset(0, 12),
                 ),
               ],
             ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.today_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          const Text(
+                            'Today Workboard',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Date: ${controller.todayLabel}',
+                            style: const TextStyle(
+                              color: Color(0xFFE5ECFF),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: () => controller.updateMobileTab(1),
+                      icon: const Icon(Icons.fact_check_rounded, size: 16),
+                      label: const Text('Go to Attendance'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.16),
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: _heroStatTile('Assigned', '$totalSessions'),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: _heroStatTile('Pending', '$totalPending')),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _heroStatTile('Submitted', '$totalSubmitted'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _teacherSectionCard(
+            title: 'Session Priority',
+            subtitle: 'Your pending attendance sessions for today.',
+            child: pendingSessions.isEmpty
+                ? _emptyStateCard(
+                    title: 'All Sessions Submitted',
+                    subtitle:
+                        'No pending session right now. You are up to date for today.',
+                    icon: Icons.verified_rounded,
+                  )
+                : Column(
+                    children: pendingSessions.map((
+                      AdminAttendanceSession item,
+                    ) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFCFDFF),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE5EAF5)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Row(
+                                children: <Widget>[
+                                  Expanded(
+                                    child: Text(
+                                      item.batchName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                  _statusPill(item.status),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: <Widget>[
+                                  _sessionMiniChip(
+                                    'Expected Present',
+                                    '${item.presentCount}',
+                                    const Color(0xFFE8EEFF),
+                                    const Color(0xFF1E4ED8),
+                                  ),
+                                  _sessionMiniChip(
+                                    'Batch Strength',
+                                    '${item.totalStudents}',
+                                    const Color(0xFFF3F4F6),
+                                    const Color(0xFF334155),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.tonalIcon(
+                                  onPressed: () => _openTeacherMarkDialog(
+                                    context,
+                                    controller,
+                                    item,
+                                  ),
+                                  icon: const Icon(Icons.checklist_rounded),
+                                  label: const Text('Mark Attendance'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _teacherSectionCard(
+            title: 'Today Snapshot',
+            subtitle: 'Live KPI cards for your day.',
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: <Widget>[
+                _teacherKpiCard(
+                  label: 'Sessions Assigned',
+                  value: '$totalSessions',
+                  icon: Icons.event_note_rounded,
+                  accent: const Color(0xFF1E4ED8),
+                ),
+                _teacherKpiCard(
+                  label: 'Submitted',
+                  value: '$totalSubmitted',
+                  icon: Icons.check_circle_rounded,
+                  accent: const Color(0xFF15803D),
+                ),
+                _teacherKpiCard(
+                  label: 'Present',
+                  value: '$totalPresent',
+                  icon: Icons.check_circle_rounded,
+                  accent: const Color(0xFF15803D),
+                ),
+                _teacherKpiCard(
+                  label: 'Leave',
+                  value: '$totalLeave',
+                  icon: Icons.time_to_leave_rounded,
+                  accent: const Color(0xFF9A3412),
+                ),
+                _teacherKpiCard(
+                  label: 'Absent',
+                  value: '$totalAbsent',
+                  icon: Icons.cancel_rounded,
+                  accent: const Color(0xFFB42318),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _teacherSectionCard(
+            title: 'Weekly Personal Performance',
+            subtitle: 'Last 5 days submission and attendance quality.',
+            child: Column(
+              children: <Widget>[
+                _dashboardStatCard(
+                  'Submission Rate (5D)',
+                  '${controller.teacherLast5DaysSubmissionRate.toStringAsFixed(1)}%',
+                  Icons.task_alt_rounded,
+                ),
+                const SizedBox(height: 10),
+                _dashboardStatCard(
+                  'Average Attendance (5D)',
+                  '${controller.teacherLast5DaysAverageAttendance.toStringAsFixed(1)}%',
+                  Icons.insights_rounded,
+                ),
+                const SizedBox(height: 10),
+                _dashboardStatCard(
+                  'On-time Streak',
+                  '${controller.teacherOnTimeSubmissionStreakDays} days',
+                  Icons.local_fire_department_rounded,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _teacherSectionCard(
+            title: 'Recent Activity Timeline',
+            subtitle: 'Your latest submitted sessions.',
+            child: recentTimeline.isEmpty
+                ? _emptyStateCard(
+                    title: 'No Recent Submissions',
+                    subtitle:
+                        'Submit attendance sessions to build your activity history.',
+                    icon: Icons.history_toggle_off_rounded,
+                  )
+                : Column(
+                    children: recentTimeline.map((AdminAttendanceSession item) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFCFDFF),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFE5EAF5)),
+                          ),
+                          child: Row(
+                            children: <Widget>[
+                              Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE8EEFF),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.check_circle_rounded,
+                                  size: 16,
+                                  color: AppColors.accent,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    Text(
+                                      item.batchName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    Text(
+                                      _sessionDateLabel(item),
+                                      style: const TextStyle(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              _sessionMiniChip(
+                                'Attendance',
+                                '${_attendancePercentage(item).toStringAsFixed(1)}%',
+                                const Color(0xFFE8EEFF),
+                                const Color(0xFF1E4ED8),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
           ),
         ],
       ),
@@ -390,20 +736,186 @@ class AttendanceView extends StatelessWidget {
     );
   }
 
+  Widget _teacherKpiCard({
+    required String label,
+    required String value,
+    required IconData icon,
+    required Color accent,
+  }) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 145),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: accent, size: 16),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _teacherHistoryBody(
     BuildContext context,
     AttendanceController controller,
   ) {
-    final List<AdminAttendanceSession> submitted =
+    if (controller.isLoading.value) {
+      return _teacherTabBackground(
+        child: ListView(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          children: <Widget>[
+            _mobileCardSkeleton(height: 160),
+            const SizedBox(height: 12),
+            _mobileCardSkeleton(height: 180),
+            const SizedBox(height: 12),
+            _mobileCardSkeleton(height: 260),
+          ],
+        ),
+      );
+    }
+    final List<AdminAttendanceSession> sessions =
         controller.filteredHistorySessions;
     final List<BatchModel> assignedBatches = controller.teacherAssignedBatches;
+    final int totalSessions = sessions.length;
+    final int submittedToday = controller.teacherTodaySubmittedSessions;
+    final int pendingToday = controller.teacherTodayPendingSessions;
+    final int totalPresent = sessions.fold<int>(
+      0,
+      (int sum, AdminAttendanceSession s) => sum + s.presentCount,
+    );
+    final int totalLeave = sessions.fold<int>(
+      0,
+      (int sum, AdminAttendanceSession s) => sum + s.leaveCount,
+    );
+    final int totalAbsent = sessions.fold<int>(
+      0,
+      (int sum, AdminAttendanceSession s) => sum + s.absentCount,
+    );
+    final int totalStrength = (totalPresent + totalLeave + totalAbsent).clamp(
+      0,
+      1000000,
+    );
+    final double leaveRatio = totalStrength <= 0
+        ? 0
+        : (totalLeave / totalStrength) * 100;
+    final Map<String, List<double>> byBatch = <String, List<double>>{};
+    for (final AdminAttendanceSession s in sessions) {
+      if (s.totalStudents <= 0) {
+        continue;
+      }
+      final double pct =
+          ((s.presentCount + s.leaveCount) / s.totalStudents) * 100;
+      byBatch.putIfAbsent(s.batchName, () => <double>[]).add(pct);
+    }
+    String bestBatch = '--';
+    String lowestBatch = '--';
+    double best = -1;
+    double lowest = 101;
+    byBatch.forEach((String name, List<double> values) {
+      final double avg =
+          values.reduce((double a, double b) => a + b) / values.length;
+      if (avg > best) {
+        best = avg;
+        bestBatch = name;
+      }
+      if (avg < lowest) {
+        lowest = avg;
+        lowestBatch = name;
+      }
+    });
+
     return _teacherTabBackground(
       child: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: <Widget>[
           _teacherSectionCard(
+            title: 'My Performance',
+            subtitle: 'Track completion, quality and streak in one place.',
+            child: Column(
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: _historyKpi(
+                        label: 'Submitted Today',
+                        value: '$submittedToday',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _historyKpi(
+                        label: 'Pending Today',
+                        value: '$pendingToday',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: _historyKpi(
+                        label: 'Submission 5D',
+                        value:
+                            '${controller.teacherLast5DaysSubmissionRate.toStringAsFixed(1)}%',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _historyKpi(
+                        label: 'Avg Attendance 5D',
+                        value:
+                            '${controller.teacherLast5DaysAverageAttendance.toStringAsFixed(1)}%',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _historyKpi(
+                  label: 'On-time Streak',
+                  value: '${controller.teacherOnTimeSubmissionStreakDays} days',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _teacherSectionCard(
             title: 'Filters',
-            subtitle: 'Narrow down by date range and batch.',
+            subtitle: 'Date, batch, status and quick search.',
             child: Column(
               children: <Widget>[
                 Row(
@@ -436,10 +948,10 @@ class AttendanceView extends StatelessWidget {
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   value: controller.historyBatchId.value.isEmpty
-                      ? null
+                      ? ''
                       : controller.historyBatchId.value,
                   decoration: const InputDecoration(
-                    labelText: 'Filter by Batch',
+                    labelText: 'Batch',
                     prefixIcon: Icon(Icons.class_rounded),
                   ),
                   items: <DropdownMenuItem<String>>[
@@ -454,9 +966,43 @@ class AttendanceView extends StatelessWidget {
                       ),
                     ),
                   ],
-                  onChanged: (String? value) {
-                    controller.updateHistoryBatchId(value ?? '');
-                  },
+                  onChanged: (String? value) =>
+                      controller.updateHistoryBatchId(value ?? ''),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: controller.historyStatus.value.isEmpty
+                      ? ''
+                      : controller.historyStatus.value,
+                  decoration: const InputDecoration(
+                    labelText: 'Status',
+                    prefixIcon: Icon(Icons.flag_rounded),
+                  ),
+                  items: const <DropdownMenuItem<String>>[
+                    DropdownMenuItem<String>(value: '', child: Text('All')),
+                    DropdownMenuItem<String>(
+                      value: 'submitted_by_teacher',
+                      child: Text('Submitted'),
+                    ),
+                    DropdownMenuItem<String>(
+                      value: 'completed',
+                      child: Text('Corrected/Completed'),
+                    ),
+                    DropdownMenuItem<String>(
+                      value: 'open',
+                      child: Text('Open'),
+                    ),
+                  ],
+                  onChanged: (String? value) =>
+                      controller.updateHistoryStatus(value ?? ''),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  onChanged: controller.updateHistorySearch,
+                  decoration: const InputDecoration(
+                    labelText: 'Search batch or session id',
+                    prefixIcon: Icon(Icons.search_rounded),
+                  ),
                 ),
               ],
             ),
@@ -464,7 +1010,8 @@ class AttendanceView extends StatelessWidget {
           const SizedBox(height: 12),
           _teacherSectionCard(
             title: 'Insights',
-            subtitle: 'Performance summary for selected filters.',
+            subtitle:
+                'Quality and attendance distribution for selected filters.',
             child: Column(
               children: <Widget>[
                 Row(
@@ -472,7 +1019,7 @@ class AttendanceView extends StatelessWidget {
                     Expanded(
                       child: _historyKpi(
                         label: 'Sessions',
-                        value: '${controller.historyTotalSessions}',
+                        value: '$totalSessions',
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -491,29 +1038,32 @@ class AttendanceView extends StatelessWidget {
                     Expanded(
                       child: _historyKpi(
                         label: 'Present',
-                        value: '${controller.historyTotalPresent}',
+                        value: '$totalPresent',
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: _historyKpi(
-                        label: 'Leave',
-                        value: '${controller.historyTotalLeave}',
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _historyKpi(
-                        label: 'Absent',
-                        value: '${controller.historyTotalAbsent}',
+                        label: 'Leave Ratio',
+                        value: '${leaveRatio.toStringAsFixed(1)}%',
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                _historyKpi(
-                  label: 'Best Batch',
-                  value: controller.historyBestBatch,
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: _historyKpi(label: 'Best Batch', value: bestBatch),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _historyKpi(
+                        label: 'Lowest Batch',
+                        value: lowestBatch,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -521,100 +1071,185 @@ class AttendanceView extends StatelessWidget {
           const SizedBox(height: 12),
           _teacherSectionCard(
             title: 'Timeline',
-            subtitle: 'Session-by-session attendance history.',
+            subtitle: 'Premium history timeline with quick drill-down.',
             child: Column(
               children: <Widget>[
-                if (submitted.isEmpty)
-                  _emptyStateCard(
-                    title: 'No History Data',
-                    subtitle:
-                        'Try changing filters or submit attendance for open sessions.',
-                    icon: Icons.history_toggle_off_rounded,
+                if (sessions.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFBFCFF),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE5EAF5)),
+                    ),
+                    child: Column(
+                      children: <Widget>[
+                        const Icon(
+                          Icons.history_toggle_off_rounded,
+                          color: AppColors.textSecondary,
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'No history sessions found',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Submit attendance sessions first, then review them here.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        FilledButton.tonalIcon(
+                          onPressed: () => controller.updateMobileTab(1),
+                          icon: const Icon(Icons.fact_check_rounded, size: 16),
+                          label: const Text('Go to Attendance'),
+                        ),
+                      ],
+                    ),
                   )
                 else
-                  ...submitted.map((AdminAttendanceSession item) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Row(
-                              children: <Widget>[
-                                Expanded(
-                                  child: Text(
-                                    item.batchName,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
+                  ...sessions.asMap().entries.map((
+                    MapEntry<int, AdminAttendanceSession> entry,
+                  ) {
+                    final int index = entry.key;
+                    final AdminAttendanceSession item = entry.value;
+                    final int total = item.totalStudents <= 0
+                        ? 1
+                        : item.totalStudents;
+                    final int marked =
+                        (item.presentCount + item.leaveCount + item.absentCount)
+                            .clamp(0, total);
+                    final double progress = (marked / total).clamp(0, 1);
+                    final bool queued = controller.isQueuedTeacherSubmission(
+                      item.id,
+                    );
+                    return TweenAnimationBuilder<double>(
+                      tween: Tween<double>(begin: 0, end: 1),
+                      duration: Duration(milliseconds: 160 + (index * 14)),
+                      curve: Curves.easeOutCubic,
+                      builder: (_, double value, Widget? child) {
+                        return Opacity(
+                          opacity: value,
+                          child: Transform.translate(
+                            offset: Offset(0, (1 - value) * 8),
+                            child: child,
+                          ),
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Row(
+                                children: <Widget>[
+                                  Expanded(
+                                    child: Text(
+                                      item.batchName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                Text(
-                                  _sessionDateLabel(item),
-                                  style: const TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 12,
+                                  Text(
+                                    _sessionDateLabel(item),
+                                    style: const TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 12,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                _statusPill(item.status),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: <Widget>[
-                                _sessionMiniChip(
-                                  'Present',
-                                  '${item.presentCount}',
-                                  const Color(0xFFDCFCE7),
-                                  const Color(0xFF166534),
-                                ),
-                                _sessionMiniChip(
-                                  'Leave',
-                                  '${item.leaveCount}',
-                                  const Color(0xFFFFF3DC),
-                                  const Color(0xFF9A3412),
-                                ),
-                                _sessionMiniChip(
-                                  'Absent',
-                                  '${item.absentCount}',
-                                  const Color(0xFFFEE2E2),
-                                  const Color(0xFF991B1B),
-                                ),
-                                _sessionMiniChip(
-                                  'Attendance',
-                                  '${_attendancePercentage(item).toStringAsFixed(1)}%',
-                                  const Color(0xFFE8EEFF),
-                                  const Color(0xFF1E4ED8),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: FilledButton.tonalIcon(
-                                onPressed: () => _openViewAttendanceDialog(
-                                  Get.overlayContext ?? context,
-                                  controller,
-                                  item,
-                                ),
-                                icon: const Icon(
-                                  Icons.visibility_rounded,
-                                  size: 16,
-                                ),
-                                label: const Text('View'),
+                                  const SizedBox(width: 8),
+                                  _statusPill(item.status),
+                                ],
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: <Widget>[
+                                  _sessionMiniChip(
+                                    'Present',
+                                    '${item.presentCount}',
+                                    const Color(0xFFDCFCE7),
+                                    const Color(0xFF166534),
+                                  ),
+                                  _sessionMiniChip(
+                                    'Leave',
+                                    '${item.leaveCount}',
+                                    const Color(0xFFFFF3DC),
+                                    const Color(0xFF9A3412),
+                                  ),
+                                  _sessionMiniChip(
+                                    'Absent',
+                                    '${item.absentCount}',
+                                    const Color(0xFFFEE2E2),
+                                    const Color(0xFF991B1B),
+                                  ),
+                                  _sessionMiniChip(
+                                    'Attendance',
+                                    '${_attendancePercentage(item).toStringAsFixed(1)}%',
+                                    const Color(0xFFE8EEFF),
+                                    const Color(0xFF1E4ED8),
+                                  ),
+                                  _sessionMiniChip(
+                                    'Sync',
+                                    queued ? 'Queued' : 'Synced',
+                                    queued
+                                        ? const Color(0xFFFFF3DC)
+                                        : const Color(0xFFDCFCE7),
+                                    queued
+                                        ? const Color(0xFF9A3412)
+                                        : const Color(0xFF166534),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              LinearProgressIndicator(
+                                minHeight: 6,
+                                value: progress,
+                                borderRadius: BorderRadius.circular(999),
+                                color: AppColors.accent,
+                                backgroundColor: const Color(0xFFE5EAF5),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Marked: $marked / ${item.totalStudents}',
+                                style: const TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: FilledButton.tonalIcon(
+                                  onPressed: () => _openViewAttendanceDialog(
+                                    Get.overlayContext ?? context,
+                                    controller,
+                                    item,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.visibility_rounded,
+                                    size: 16,
+                                  ),
+                                  label: const Text('View Details'),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     );
@@ -633,10 +1268,14 @@ class AttendanceView extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     return InkWell(
-      onTap: onTap,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        constraints: const BoxConstraints(minHeight: _kMobileButtonHeight),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
         decoration: BoxDecoration(
           color: active ? const Color(0xFF1E4ED8) : AppColors.surface,
           borderRadius: BorderRadius.circular(10),
@@ -720,7 +1359,18 @@ class AttendanceView extends StatelessWidget {
                   ) {
                     if (userSnapshot.connectionState ==
                         ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
+                      return _teacherTabBackground(
+                        child: ListView(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          children: <Widget>[
+                            _mobileCardSkeleton(height: 180),
+                            const SizedBox(height: 12),
+                            _mobileCardSkeleton(height: 220),
+                            const SizedBox(height: 12),
+                            _mobileCardSkeleton(height: 220),
+                          ],
+                        ),
+                      );
                     }
                     final Map<String, dynamic> userData =
                         userSnapshot.data?.data() ?? <String, dynamic>{};
@@ -760,12 +1410,52 @@ class AttendanceView extends StatelessWidget {
                                     ?.trim() ??
                                 '';
 
+                            final int assignedBatches =
+                                controller.teacherAssignedBatches.length;
+                            final int submitted30D = controller
+                                .filteredHistorySessions
+                                .where(
+                                  (AdminAttendanceSession session) =>
+                                      session.teacherSubmitted,
+                                )
+                                .length;
+                            final int pendingToday =
+                                controller.teacherTodayPendingSessions;
+                            final int queueCount =
+                                controller.queuedTeacherSubmissionCount;
+                            final String updatedAt = _readableDateTime(
+                              teacherData['updatedAt'] ?? userData['updatedAt'],
+                            );
+                            final List<String> expertiseTags = expertise
+                                .split(',')
+                                .map((String e) => e.trim())
+                                .where((String e) => e.isNotEmpty)
+                                .toList();
+
                             return ListView(
                               padding: const EdgeInsets.all(AppSpacing.md),
                               children: <Widget>[
-                                _teacherSectionCard(
-                                  title: 'Profile',
-                                  subtitle: 'Manage your professional details.',
+                                Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: <Color>[
+                                        Color(0xFF0F3AA9),
+                                        Color(0xFF1E4ED8),
+                                        Color(0xFF2F5DFF),
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: const <BoxShadow>[
+                                      BoxShadow(
+                                        color: Color(0x331D4ED8),
+                                        blurRadius: 24,
+                                        offset: Offset(0, 12),
+                                      ),
+                                    ],
+                                  ),
                                   child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
@@ -773,24 +1463,19 @@ class AttendanceView extends StatelessWidget {
                                       Row(
                                         children: <Widget>[
                                           Container(
-                                            width: 62,
-                                            height: 62,
+                                            width: 64,
+                                            height: 64,
                                             decoration: BoxDecoration(
-                                              gradient: const LinearGradient(
-                                                colors: <Color>[
-                                                  Color(0xFF1E4ED8),
-                                                  Color(0xFF2F5DFF),
-                                                ],
-                                                begin: Alignment.topLeft,
-                                                end: Alignment.bottomRight,
+                                              color: Colors.white.withValues(
+                                                alpha: 0.18,
                                               ),
                                               borderRadius:
-                                                  BorderRadius.circular(16),
+                                                  BorderRadius.circular(18),
                                             ),
                                             child: const Icon(
                                               Icons.school_rounded,
                                               color: Colors.white,
-                                              size: 30,
+                                              size: 32,
                                             ),
                                           ),
                                           const SizedBox(width: 12),
@@ -802,6 +1487,7 @@ class AttendanceView extends StatelessWidget {
                                                 Text(
                                                   name,
                                                   style: const TextStyle(
+                                                    color: Colors.white,
                                                     fontSize: 20,
                                                     fontWeight: FontWeight.w800,
                                                   ),
@@ -810,8 +1496,7 @@ class AttendanceView extends StatelessWidget {
                                                 Text(
                                                   email.isEmpty ? '--' : email,
                                                   style: const TextStyle(
-                                                    color:
-                                                        AppColors.textSecondary,
+                                                    color: Color(0xFFE5ECFF),
                                                     fontWeight: FontWeight.w500,
                                                   ),
                                                 ),
@@ -820,15 +1505,101 @@ class AttendanceView extends StatelessWidget {
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 16),
+                                      const SizedBox(height: 10),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: <Widget>[
+                                          _sessionMiniChip(
+                                            'Role',
+                                            'Teacher',
+                                            const Color(0x1AFFFFFF),
+                                            Colors.white,
+                                          ),
+                                          _sessionMiniChip(
+                                            'Profile',
+                                            'Verified',
+                                            const Color(0x1AFFFFFF),
+                                            Colors.white,
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        updatedAt.isEmpty
+                                            ? 'Last updated: --'
+                                            : 'Last updated: $updatedAt',
+                                        style: const TextStyle(
+                                          color: Color(0xFFDCE6FF),
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                _teacherSectionCard(
+                                  title: 'Performance Snapshot',
+                                  subtitle:
+                                      'Your teaching profile and attendance impact.',
+                                  child: Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: <Widget>[
+                                      _historyKpi(
+                                        label: 'Assigned Batches',
+                                        value: '$assignedBatches',
+                                      ),
+                                      _historyKpi(
+                                        label: 'Submitted (30D)',
+                                        value: '$submitted30D',
+                                      ),
+                                      _historyKpi(
+                                        label: 'Avg Attendance',
+                                        value:
+                                            '${controller.teacherLast5DaysAverageAttendance.toStringAsFixed(1)}%',
+                                      ),
+                                      _historyKpi(
+                                        label: 'Pending Today',
+                                        value: '$pendingToday',
+                                      ),
+                                      _historyKpi(
+                                        label: 'Offline Queue',
+                                        value: '$queueCount',
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                _teacherSectionCard(
+                                  title: 'Personal Information',
+                                  subtitle:
+                                      'Primary account details used in the app.',
+                                  child: Column(
+                                    children: <Widget>[
                                       _profileInfoTile(
-                                        icon: Icons.workspace_premium_rounded,
-                                        label: 'Expertise',
-                                        value: expertise.isEmpty
-                                            ? '--'
-                                            : expertise,
+                                        icon: Icons.person_rounded,
+                                        label: 'Full Name',
+                                        value: name,
                                       ),
                                       const SizedBox(height: 10),
+                                      _profileInfoTile(
+                                        icon: Icons.email_outlined,
+                                        label: 'Email',
+                                        value: email.isEmpty ? '--' : email,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                _teacherSectionCard(
+                                  title: 'Professional Information',
+                                  subtitle:
+                                      'Your expertise and professional profile.',
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: <Widget>[
                                       _profileInfoTile(
                                         icon: Icons.school_outlined,
                                         label: 'Education',
@@ -844,7 +1615,68 @@ class AttendanceView extends StatelessWidget {
                                             ? '--'
                                             : experience,
                                       ),
-                                      const SizedBox(height: 16),
+                                      const SizedBox(height: 10),
+                                      if (expertiseTags.isEmpty)
+                                        _profileInfoTile(
+                                          icon: Icons.workspace_premium_rounded,
+                                          label: 'Expertise',
+                                          value: '--',
+                                        )
+                                      else
+                                        Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFAFCFF),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            border: Border.all(
+                                              color: const Color(0xFFE4EAF6),
+                                            ),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: <Widget>[
+                                              const Text(
+                                                'Expertise',
+                                                style: TextStyle(
+                                                  color:
+                                                      AppColors.textSecondary,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Wrap(
+                                                spacing: 8,
+                                                runSpacing: 8,
+                                                children: expertiseTags
+                                                    .map(
+                                                      (
+                                                        String tag,
+                                                      ) => _sessionMiniChip(
+                                                        'Tag',
+                                                        tag,
+                                                        const Color(0xFFE8EEFF),
+                                                        const Color(0xFF1E4ED8),
+                                                      ),
+                                                    )
+                                                    .toList(),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                _teacherSectionCard(
+                                  title: 'Security & Account',
+                                  subtitle:
+                                      'Secure your account and manage sessions.',
+                                  child: Column(
+                                    children: <Widget>[
                                       SizedBox(
                                         width: double.infinity,
                                         child: FilledButton.icon(
@@ -861,6 +1693,20 @@ class AttendanceView extends StatelessWidget {
                                           },
                                           icon: const Icon(Icons.edit_rounded),
                                           label: const Text('Update Profile'),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      SizedBox(
+                                        width: double.infinity,
+                                        child: OutlinedButton.icon(
+                                          onPressed: () =>
+                                              _openTeacherPasswordDialog(
+                                                context,
+                                              ),
+                                          icon: const Icon(
+                                            Icons.lock_reset_rounded,
+                                          ),
+                                          label: const Text('Change Password'),
                                         ),
                                       ),
                                       const SizedBox(height: 10),
@@ -930,17 +1776,21 @@ class AttendanceView extends StatelessWidget {
     required String initialEducation,
     required String initialExperience,
   }) async {
+    final String initialNameNormalized = initialName.trim();
+    final String initialExpertiseNormalized = initialExpertise.trim();
+    final String initialEducationNormalized = initialEducation.trim();
+    final String initialExperienceNormalized = initialExperience.trim();
     final TextEditingController nameController = TextEditingController(
-      text: initialName,
+      text: initialNameNormalized,
     );
     final TextEditingController expertiseController = TextEditingController(
-      text: initialExpertise,
+      text: initialExpertiseNormalized,
     );
     final TextEditingController educationController = TextEditingController(
-      text: initialEducation,
+      text: initialEducationNormalized,
     );
     final TextEditingController experienceController = TextEditingController(
-      text: initialExperience,
+      text: initialExperienceNormalized,
     );
     final String normalizedEmail = email.trim();
     final TextEditingController emailController = TextEditingController(
@@ -949,9 +1799,46 @@ class AttendanceView extends StatelessWidget {
     bool isSaving = false;
     String? nameError;
 
+    bool hasChanges() {
+      return nameController.text.trim() != initialNameNormalized ||
+          expertiseController.text.trim() != initialExpertiseNormalized ||
+          educationController.text.trim() != initialEducationNormalized ||
+          experienceController.text.trim() != initialExperienceNormalized;
+    }
+
+    Future<bool> confirmDiscardIfNeeded(BuildContext modalContext) async {
+      if (!hasChanges()) {
+        return true;
+      }
+      final bool? confirm = await showDialog<bool>(
+        context: modalContext,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Discard changes?'),
+            content: const Text(
+              'You have unsaved profile changes. Do you want to discard them?',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Keep Editing'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Discard'),
+              ),
+            ],
+          );
+        },
+      );
+      return confirm ?? false;
+    }
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
       backgroundColor: Colors.transparent,
       builder: (BuildContext sheetContext) {
         return StatefulBuilder(
@@ -1047,12 +1934,23 @@ class AttendanceView extends StatelessWidget {
                           OutlinedButton(
                             onPressed: isSaving
                                 ? null
-                                : () => Navigator.of(modalContext).pop(),
+                                : () async {
+                                    final bool shouldClose =
+                                        await confirmDiscardIfNeeded(
+                                          modalContext,
+                                        );
+                                    if (!shouldClose) {
+                                      return;
+                                    }
+                                    if (modalContext.mounted) {
+                                      Navigator.of(modalContext).pop();
+                                    }
+                                  },
                             child: const Text('Cancel'),
                           ),
                           const Spacer(),
                           FilledButton.icon(
-                            onPressed: isSaving
+                            onPressed: isSaving || !hasChanges()
                                 ? null
                                 : () async {
                                     final String name = nameController.text
@@ -1175,6 +2073,175 @@ class AttendanceView extends StatelessWidget {
     educationController.dispose();
     experienceController.dispose();
     emailController.dispose();
+  }
+
+  Future<void> _openTeacherPasswordDialog(BuildContext context) async {
+    final TextEditingController newPasswordController = TextEditingController();
+    final TextEditingController confirmController = TextEditingController();
+    bool isSaving = false;
+    String? passwordError;
+
+    await _showSaasDialog(
+      context: context,
+      child: StatefulBuilder(
+        builder: (BuildContext dialogContext, void Function(void Function()) setState) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              _dialogHeader(
+                icon: Icons.lock_reset_rounded,
+                title: 'Change Password',
+                subtitle: 'Use at least 6 characters for a secure password.',
+                accent: AppColors.accent,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              TextField(
+                controller: newPasswordController,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'New Password',
+                  errorText: passwordError,
+                  prefixIcon: const Icon(Icons.lock_outline_rounded),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: confirmController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Confirm Password',
+                  prefixIcon: Icon(Icons.verified_user_outlined),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                children: <Widget>[
+                  OutlinedButton(
+                    onPressed: isSaving ? null : _closeActiveDialog,
+                    child: const Text('Cancel'),
+                  ),
+                  const Spacer(),
+                  FilledButton.icon(
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            final String newPassword = newPasswordController
+                                .text
+                                .trim();
+                            final String confirm = confirmController.text
+                                .trim();
+                            if (newPassword.length < 6) {
+                              setState(() {
+                                passwordError =
+                                    'Password must be at least 6 characters.';
+                              });
+                              return;
+                            }
+                            if (newPassword != confirm) {
+                              setState(() {
+                                passwordError =
+                                    'Password and confirm password do not match.';
+                              });
+                              return;
+                            }
+                            setState(() {
+                              isSaving = true;
+                              passwordError = null;
+                            });
+                            try {
+                              final User? user =
+                                  FirebaseAuth.instance.currentUser;
+                              if (user == null) {
+                                throw Exception('Authentication required.');
+                              }
+                              await user.updatePassword(newPassword);
+                              _closeActiveDialog();
+                              await _showSaasDialog(
+                                context: context,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    _dialogHeader(
+                                      icon: Icons.check_circle_rounded,
+                                      title: 'Password Updated',
+                                      subtitle:
+                                          'Your account password has been changed successfully.',
+                                      accent: AppColors.success,
+                                    ),
+                                    const SizedBox(height: AppSpacing.md),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: FilledButton(
+                                        onPressed: _closeActiveDialog,
+                                        child: const Text('OK'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            } on FirebaseAuthException catch (e) {
+                              String message = 'Failed to update password.';
+                              if (e.code == 'requires-recent-login') {
+                                message =
+                                    'For security, please log in again and then change your password.';
+                              }
+                              await _showErrorDialog(context, message);
+                              if (dialogContext.mounted) {
+                                setState(() {
+                                  isSaving = false;
+                                });
+                              }
+                            } catch (_) {
+                              await _showErrorDialog(
+                                context,
+                                'Failed to update password. Please try again.',
+                              );
+                              if (dialogContext.mounted) {
+                                setState(() {
+                                  isSaving = false;
+                                });
+                              }
+                            }
+                          },
+                    icon: isSaving
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.check_rounded),
+                    label: Text(isSaving ? 'Saving...' : 'Update Password'),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    newPasswordController.dispose();
+    confirmController.dispose();
+  }
+
+  String _readableDateTime(Object? value) {
+    DateTime? parsed;
+    if (value is Timestamp) {
+      parsed = value.toDate();
+    } else if (value is DateTime) {
+      parsed = value;
+    }
+    if (parsed == null) {
+      return '';
+    }
+    final String year = parsed.year.toString();
+    final String month = parsed.month.toString().padLeft(2, '0');
+    final String day = parsed.day.toString().padLeft(2, '0');
+    final String hour = parsed.hour.toString().padLeft(2, '0');
+    final String minute = parsed.minute.toString().padLeft(2, '0');
+    return '$day/$month/$year $hour:$minute';
   }
 
   Future<void> _logoutToLogin() async {
@@ -1735,16 +2802,213 @@ class AttendanceView extends StatelessWidget {
           Expanded(
             child: Obx(() {
               final List<AdminAttendanceSession> sessions =
-                  controller.sortedTodaySessions;
+                  isTeacher && isMobile
+                  ? controller.teacherTaskFirstTodaySessions
+                  : controller.sortedTodaySessions;
               if (controller.isLoading.value && sessions.isEmpty) {
                 return _sessionsSkeletonList(isMobile: isMobile);
               }
               if (sessions.isEmpty) {
                 return _emptyStateCard(
                   title: 'No Sessions Yet',
-                  subtitle:
-                      'Generate today sessions first, then they will appear here.',
+                  subtitle: isTeacher
+                      ? 'No attendance sessions are assigned to you for today.'
+                      : 'Generate today sessions first, then they will appear here.',
                   icon: Icons.event_busy_rounded,
+                );
+              }
+
+              if (isMobile && isTeacher) {
+                final List<AdminAttendanceSession> pending = sessions.where((
+                  AdminAttendanceSession s,
+                ) {
+                  return _isOpenSession(s.status) && !s.teacherSubmitted;
+                }).toList();
+                final List<AdminAttendanceSession> submitted = sessions.where((
+                  AdminAttendanceSession s,
+                ) {
+                  return s.teacherSubmitted || !_isOpenSession(s.status);
+                }).toList();
+
+                Widget teacherCard(AdminAttendanceSession item, int index) {
+                  final int marked =
+                      (item.presentCount + item.leaveCount + item.absentCount)
+                          .clamp(
+                            0,
+                            item.totalStudents <= 0 ? 0 : item.totalStudents,
+                          );
+                  final int total = item.totalStudents <= 0
+                      ? 1
+                      : item.totalStudents;
+                  final double markProgress = (marked / total).clamp(0, 1);
+                  return TweenAnimationBuilder<double>(
+                    tween: Tween<double>(begin: 0, end: 1),
+                    duration: Duration(milliseconds: 170 + (index * 14)),
+                    curve: Curves.easeOutCubic,
+                    builder: (_, double value, Widget? child) {
+                      return Opacity(
+                        opacity: value,
+                        child: Transform.translate(
+                          offset: Offset(0, (1 - value) * 8),
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFCFDFF),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFE5EAF5)),
+                        boxShadow: const <BoxShadow>[
+                          BoxShadow(
+                            color: Color(0x0A0F172A),
+                            blurRadius: 14,
+                            offset: Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Row(
+                            children: <Widget>[
+                              Expanded(
+                                child: Text(
+                                  item.batchName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                              _statusPill(item.status),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: <Widget>[
+                              _sessionMiniChip(
+                                'Target Present',
+                                '${item.presentCount}',
+                                const Color(0xFFDCFCE7),
+                                const Color(0xFF166534),
+                              ),
+                              _sessionMiniChip(
+                                'Leave',
+                                '${item.leaveCount}',
+                                const Color(0xFFFFF3DC),
+                                const Color(0xFF9A3412),
+                              ),
+                              _sessionMiniChip(
+                                'Total',
+                                '${item.totalStudents}',
+                                const Color(0xFFE8EEFF),
+                                const Color(0xFF1E4ED8),
+                              ),
+                              _sessionMiniChip(
+                                'Attendance',
+                                '${_attendancePercentage(item).toStringAsFixed(1)}%',
+                                const Color(0xFFE8EEFF),
+                                const Color(0xFF1E4ED8),
+                              ),
+                              if (controller.hasTeacherDraft(item.id))
+                                _sessionMiniChip(
+                                  'Draft',
+                                  'Saved',
+                                  const Color(0xFFF3F4F6),
+                                  const Color(0xFF334155),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          LinearProgressIndicator(
+                            minHeight: 6,
+                            value: markProgress,
+                            borderRadius: BorderRadius.circular(999),
+                            color: AppColors.accent,
+                            backgroundColor: const Color(0xFFE5EAF5),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Marked: $marked / ${item.totalStudents}',
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                          if (_isOpenSession(item.status) &&
+                              !item.teacherSubmitted) ...<Widget>[
+                            const SizedBox(height: AppSpacing.sm),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.tonalIcon(
+                                onPressed: () => _openTeacherMarkDialog(
+                                  context,
+                                  controller,
+                                  item,
+                                ),
+                                icon: const Icon(Icons.checklist_rounded),
+                                label: const Text('Mark Attendance'),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                return ListView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  children: <Widget>[
+                    const Text(
+                      'Pending Sessions Today',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (pending.isEmpty)
+                      const Text(
+                        'No pending sessions.',
+                        style: TextStyle(color: AppColors.textSecondary),
+                      )
+                    else
+                      ...List<Widget>.generate(pending.length, (int index) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: teacherCard(pending[index], index),
+                        );
+                      }),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Submitted Sessions',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (submitted.isEmpty)
+                      const Text(
+                        'No submitted sessions yet.',
+                        style: TextStyle(color: AppColors.textSecondary),
+                      )
+                    else
+                      ...List<Widget>.generate(submitted.length, (int index) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: teacherCard(submitted[index], index),
+                        );
+                      }),
+                  ],
                 );
               }
 
@@ -1809,7 +3073,7 @@ class AttendanceView extends StatelessWidget {
                               runSpacing: 8,
                               children: <Widget>[
                                 _sessionMiniChip(
-                                  'Present',
+                                  isTeacher ? 'Target Present' : 'Present',
                                   '${item.presentCount}',
                                   const Color(0xFFDCFCE7),
                                   const Color(0xFF166534),
@@ -1825,6 +3089,12 @@ class AttendanceView extends StatelessWidget {
                                   '${item.leaveCount}',
                                   const Color(0xFFFFF3DC),
                                   const Color(0xFF9A3412),
+                                ),
+                                _sessionMiniChip(
+                                  'Attendance',
+                                  '${_attendancePercentage(item).toStringAsFixed(1)}%',
+                                  const Color(0xFFE8EEFF),
+                                  const Color(0xFF1E4ED8),
                                 ),
                                 _sessionMiniChip(
                                   'Total',
@@ -2724,20 +3994,23 @@ class AttendanceView extends StatelessWidget {
     );
   }
 
+  Widget _mobileCardSkeleton({required double height}) {
+    return Container(
+      width: double.infinity,
+      height: height,
+      decoration: BoxDecoration(
+        color: const Color(0xFFEEF2F9),
+        borderRadius: BorderRadius.circular(_kMobileRadius),
+        border: Border.all(color: const Color(0xFFE5EAF5)),
+      ),
+    );
+  }
+
   Widget _statusPill(String status) {
     final String normalized = status.trim().toLowerCase();
-    final bool isSubmitted = normalized.contains('submitted');
-    final bool isOpen = normalized == 'open' || normalized == 'active';
-    final Color bg = isSubmitted
-        ? const Color(0xFFDCFCE7)
-        : isOpen
-        ? const Color(0xFFE8EEFF)
-        : const Color(0xFFFEE2E2);
-    final Color fg = isSubmitted
-        ? const Color(0xFF166534)
-        : isOpen
-        ? const Color(0xFF1E4ED8)
-        : const Color(0xFF991B1B);
+    final ({Color bg, Color fg}) palette = _statusPalette(normalized);
+    final Color bg = palette.bg;
+    final Color fg = palette.fg;
 
     return Align(
       alignment: Alignment.centerLeft,
@@ -2758,6 +4031,20 @@ class AttendanceView extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  ({Color bg, Color fg}) _statusPalette(String normalizedStatus) {
+    if (normalizedStatus.contains('submitted') ||
+        normalizedStatus == 'completed') {
+      return (bg: const Color(0xFFDCFCE7), fg: const Color(0xFF166534));
+    }
+    if (normalizedStatus == 'queued') {
+      return (bg: const Color(0xFFFFF3DC), fg: const Color(0xFF9A3412));
+    }
+    if (normalizedStatus == 'open' || normalizedStatus == 'active') {
+      return (bg: const Color(0xFFE8EEFF), fg: const Color(0xFF1E4ED8));
+    }
+    return (bg: const Color(0xFFFEE2E2), fg: const Color(0xFF991B1B));
   }
 
   Widget _sessionMiniChip(String label, String value, Color bg, Color fg) {
@@ -2857,181 +4144,655 @@ class AttendanceView extends StatelessWidget {
       return;
     }
 
-    final Set<String> presentIds = <String>{};
-    final Set<String> leaveIds = <String>{};
+    final TeacherAttendanceDraft draft = controller.draftForSession(session.id);
+    final Set<String> allowedIds = students
+        .map((StudentModel student) => student.id)
+        .toSet();
+    final Set<String> presentIds = draft.presentStudentIds
+        .where((String id) => allowedIds.contains(id))
+        .toSet();
+    final Set<String> leaveIds = draft.leaveStudentIds
+        .where((String id) => allowedIds.contains(id))
+        .toSet();
+    final TextEditingController searchController = TextEditingController(
+      text: draft.search,
+    );
+    String statusFilter =
+        <String>['all', 'present', 'leave', 'unmarked'].contains(draft.filter)
+        ? draft.filter
+        : 'all';
+    bool isSubmitting = false;
+    String syncStatus = controller.isQueuedTeacherSubmission(session.id)
+        ? 'Queued for retry'
+        : 'Live sync';
+    DateTime lastSyncAt = DateTime.now();
     String warningText = '';
 
-    await _showSaasDialog(
+    await showModalBottomSheet<void>(
       context: context,
-      child: StatefulBuilder(
-        builder: (BuildContext context, void Function(void Function()) setState) {
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              _dialogHeader(
-                icon: Icons.checklist_rounded,
-                title: 'Submit Attendance',
-                subtitle:
-                    '${session.batchName} - Present max ${session.presentCount}',
-                accent: AppColors.accent,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              if (warningText.isNotEmpty)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF3DC),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFF2D7A2)),
-                  ),
-                  child: Text(
-                    warningText,
-                    style: const TextStyle(
-                      color: Color(0xFF9A3412),
-                      fontSize: 12,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext sheetContext) {
+        return FractionallySizedBox(
+          heightFactor: 0.94,
+          child: Container(
+            decoration: const BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: StatefulBuilder(
+              builder: (BuildContext context, void Function(void Function()) setState) {
+                final String searchQuery = searchController.text
+                    .trim()
+                    .toLowerCase();
+                final List<StudentModel> visibleStudents = students.where((
+                  StudentModel student,
+                ) {
+                  final bool isPresent = presentIds.contains(student.id);
+                  final bool isLeave = leaveIds.contains(student.id);
+                  final bool statusMatch = switch (statusFilter) {
+                    'present' => isPresent,
+                    'leave' => isLeave,
+                    'unmarked' => !isPresent && !isLeave,
+                    _ => true,
+                  };
+                  if (!statusMatch) {
+                    return false;
+                  }
+                  if (searchQuery.isEmpty) {
+                    return true;
+                  }
+                  return student.name.toLowerCase().contains(searchQuery) ||
+                      (student.studentId ?? '').toLowerCase().contains(
+                        searchQuery,
+                      ) ||
+                      student.contactNo.toLowerCase().contains(searchQuery);
+                }).toList();
+                final int total = session.totalStudents > 0
+                    ? session.totalStudents
+                    : students.length;
+                final int expectedTarget = session.presentCount.clamp(0, total);
+                final int presentCount = presentIds.length;
+                final int leaveCount = leaveIds.length;
+                final int absentCount = (total - presentCount - leaveCount)
+                    .clamp(0, 1000000);
+                final bool presentCapReached = presentCount >= expectedTarget;
+                final double progress = expectedTarget <= 0
+                    ? 0
+                    : (presentCount / expectedTarget).clamp(0, 1);
+                return Column(
+                  mainAxisSize: MainAxisSize.max,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    const SizedBox(height: 8),
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFD8E1F4),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              if (warningText.isNotEmpty) const SizedBox(height: AppSpacing.sm),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 360),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: students.length,
-                  separatorBuilder: (_, __) =>
-                      const SizedBox(height: AppSpacing.xs),
-                  itemBuilder: (BuildContext context, int index) {
-                    final student = students[index];
-                    final bool isPresent = presentIds.contains(student.id);
-                    final bool isLeave = leaveIds.contains(student.id);
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
+                    const SizedBox(height: 10),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: _dialogHeader(
+                        icon: Icons.checklist_rounded,
+                        title: 'Submit Attendance',
+                        subtitle:
+                            '${session.batchName} - Expected present: $expectedTarget',
+                        accent: AppColors.accent,
                       ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFCFDFF),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFE5EAF5)),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: <Widget>[
+                                _sessionMiniChip(
+                                  'Present',
+                                  '$presentCount',
+                                  const Color(0xFFDCFCE7),
+                                  const Color(0xFF166534),
+                                ),
+                                _sessionMiniChip(
+                                  'Leave',
+                                  '$leaveCount',
+                                  const Color(0xFFFFF3DC),
+                                  const Color(0xFF9A3412),
+                                ),
+                                _sessionMiniChip(
+                                  'Absent',
+                                  '$absentCount',
+                                  const Color(0xFFFEE2E2),
+                                  const Color(0xFF991B1B),
+                                ),
+                                _sessionMiniChip(
+                                  'Target',
+                                  '$expectedTarget',
+                                  const Color(0xFFE8EEFF),
+                                  const Color(0xFF1E4ED8),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            LinearProgressIndicator(
+                              minHeight: 7,
+                              value: progress,
+                              borderRadius: BorderRadius.circular(999),
+                              color: progress >= 1
+                                  ? AppColors.success
+                                  : AppColors.accent,
+                              backgroundColor: const Color(0xFFE5EAF5),
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: searchController,
+                              onChanged: (_) => setState(() {}),
+                              decoration: const InputDecoration(
+                                labelText: 'Search student',
+                                hintText: 'Name, ID, contact',
+                                prefixIcon: Icon(Icons.search_rounded),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: <Widget>[
+                                _historyRangeChip(
+                                  label: 'All',
+                                  active: statusFilter == 'all',
+                                  onTap: () =>
+                                      setState(() => statusFilter = 'all'),
+                                ),
+                                _historyRangeChip(
+                                  label: 'Present',
+                                  active: statusFilter == 'present',
+                                  onTap: () =>
+                                      setState(() => statusFilter = 'present'),
+                                ),
+                                _historyRangeChip(
+                                  label: 'Leave',
+                                  active: statusFilter == 'leave',
+                                  onTap: () =>
+                                      setState(() => statusFilter = 'leave'),
+                                ),
+                                _historyRangeChip(
+                                  label: 'Unmarked',
+                                  active: statusFilter == 'unmarked',
+                                  onTap: () =>
+                                      setState(() => statusFilter = 'unmarked'),
+                                ),
+                                FilledButton.tonal(
+                                  onPressed: isSubmitting
+                                      ? null
+                                      : () {
+                                          setState(() {
+                                            warningText = '';
+                                            presentIds.clear();
+                                            leaveIds.clear();
+                                            for (
+                                              int i = 0;
+                                              i < students.length &&
+                                                  i < expectedTarget;
+                                              i++
+                                            ) {
+                                              presentIds.add(students[i].id);
+                                            }
+                                          });
+                                        },
+                                  child: const Text('Auto Fill'),
+                                ),
+                                FilledButton.tonal(
+                                  onPressed: isSubmitting
+                                      ? null
+                                      : () {
+                                          setState(() {
+                                            warningText = '';
+                                            presentIds.clear();
+                                            leaveIds.clear();
+                                          });
+                                        },
+                                  child: const Text('Clear'),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            if (warningText.isNotEmpty)
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFF3DC),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: const Color(0xFFF2D7A2),
+                                  ),
+                                ),
+                                child: Text(
+                                  warningText,
+                                  style: const TextStyle(
+                                    color: Color(0xFF9A3412),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            if (warningText.isNotEmpty)
+                              const SizedBox(height: AppSpacing.sm),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxHeight: 360),
+                              child: ListView.separated(
+                                shrinkWrap: true,
+                                itemCount: visibleStudents.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: AppSpacing.xs),
+                                itemBuilder: (BuildContext context, int index) {
+                                  final StudentModel student =
+                                      visibleStudents[index];
+                                  final bool isPresent = presentIds.contains(
+                                    student.id,
+                                  );
+                                  final bool isLeave = leaveIds.contains(
+                                    student.id,
+                                  );
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFCFDFF),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: const Color(0xFFE5EAF5),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: <Widget>[
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: <Widget>[
+                                              Text(
+                                                student.name,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              if ((student.studentId ?? '')
+                                                  .trim()
+                                                  .isNotEmpty)
+                                                Text(
+                                                  'ID: ${student.studentId}',
+                                                  style: const TextStyle(
+                                                    color:
+                                                        AppColors.textSecondary,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                        TextButton(
+                                          onPressed: () {
+                                            HapticFeedback.selectionClick();
+                                            setState(() {
+                                              warningText = '';
+                                              if (isPresent) {
+                                                presentIds.remove(student.id);
+                                                return;
+                                              }
+                                              if (presentCapReached) {
+                                                warningText =
+                                                    'You can select max $expectedTarget students as Present.';
+                                                return;
+                                              }
+                                              presentIds.add(student.id);
+                                              leaveIds.remove(student.id);
+                                            });
+                                          },
+                                          style: TextButton.styleFrom(
+                                            backgroundColor: isPresent
+                                                ? const Color(0xFFDCFCE7)
+                                                : const Color(0xFFF8FAFF),
+                                          ),
+                                          child: Text(
+                                            'Present',
+                                            style: TextStyle(
+                                              color: isPresent
+                                                  ? const Color(0xFF166534)
+                                                  : AppColors.textSecondary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        TextButton(
+                                          onPressed: () {
+                                            HapticFeedback.selectionClick();
+                                            setState(() {
+                                              warningText = '';
+                                              if (isLeave) {
+                                                leaveIds.remove(student.id);
+                                                return;
+                                              }
+                                              leaveIds.add(student.id);
+                                              presentIds.remove(student.id);
+                                            });
+                                          },
+                                          style: TextButton.styleFrom(
+                                            backgroundColor: isLeave
+                                                ? const Color(0xFFFFF3DC)
+                                                : const Color(0xFFF8FAFF),
+                                          ),
+                                          child: Text(
+                                            'Leave',
+                                            style: TextStyle(
+                                              color: isLeave
+                                                  ? const Color(0xFF9A3412)
+                                                  : AppColors.textSecondary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        TextButton(
+                                          onPressed: () {
+                                            HapticFeedback.selectionClick();
+                                            setState(() {
+                                              warningText = '';
+                                              leaveIds.remove(student.id);
+                                              presentIds.remove(student.id);
+                                            });
+                                          },
+                                          style: TextButton.styleFrom(
+                                            backgroundColor:
+                                                !isPresent && !isLeave
+                                                ? const Color(0xFFFEE2E2)
+                                                : const Color(0xFFF8FAFF),
+                                          ),
+                                          child: Text(
+                                            'Absent',
+                                            style: TextStyle(
+                                              color: !isPresent && !isLeave
+                                                  ? const Color(0xFF991B1B)
+                                                  : AppColors.textSecondary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      child: Row(
+                    ),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF8FAFF),
+                        border: Border(
+                          top: BorderSide(color: Color(0xFFE4EAF7)),
+                        ),
+                      ),
+                      child: Column(
                         children: <Widget>[
-                          Expanded(
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.end,
+                            children: <Widget>[
+                              OutlinedButton(
+                                onPressed: isSubmitting
+                                    ? null
+                                    : () => Navigator.of(context).pop(),
+                                child: const Text('Cancel'),
+                              ),
+                              OutlinedButton(
+                                onPressed: isSubmitting
+                                    ? null
+                                    : () {
+                                        controller.cacheTeacherDraft(
+                                          sessionId: session.id,
+                                          presentStudentIds: presentIds
+                                              .toList(),
+                                          leaveStudentIds: leaveIds.toList(),
+                                          search: searchController.text,
+                                          filter: statusFilter,
+                                        );
+                                        setState(() {
+                                          syncStatus = 'Draft saved';
+                                          lastSyncAt = DateTime.now();
+                                        });
+                                      },
+                                child: const Text('Save Draft'),
+                              ),
+                              if (controller.isQueuedTeacherSubmission(
+                                session.id,
+                              ))
+                                TextButton(
+                                  onPressed: isSubmitting
+                                      ? null
+                                      : () async {
+                                          setState(() {
+                                            isSubmitting = true;
+                                          });
+                                          try {
+                                            await controller
+                                                .retryQueuedTeacherSubmission(
+                                                  session.id,
+                                                );
+                                            setState(() {
+                                              syncStatus = 'Queue synced';
+                                              isSubmitting = false;
+                                              lastSyncAt = DateTime.now();
+                                            });
+                                          } catch (e) {
+                                            setState(() {
+                                              isSubmitting = false;
+                                            });
+                                            await _showErrorDialog(
+                                              context,
+                                              '$e',
+                                            );
+                                          }
+                                        },
+                                  child: const Text('Retry Queue'),
+                                ),
+                              FilledButton(
+                                onPressed: isSubmitting
+                                    ? null
+                                    : () async {
+                                        if (presentIds.length >
+                                            expectedTarget) {
+                                          setState(() {
+                                            warningText =
+                                                'Present selection exceeds target ($expectedTarget).';
+                                          });
+                                          return;
+                                        }
+                                        final bool confirmed =
+                                            await _confirmTeacherAttendanceSubmit(
+                                              context: context,
+                                              batchName: session.batchName,
+                                              present: presentIds.length,
+                                              leave: leaveIds.length,
+                                              absent:
+                                                  students.length -
+                                                  presentIds.length -
+                                                  leaveIds.length,
+                                              expectedTarget: expectedTarget,
+                                            );
+                                        if (!confirmed) {
+                                          return;
+                                        }
+                                        setState(() {
+                                          isSubmitting = true;
+                                        });
+                                        final List<String> allIds = students
+                                            .map((student) => student.id)
+                                            .toList();
+                                        final List<String> absentIds = allIds
+                                            .where(
+                                              (String id) =>
+                                                  !presentIds.contains(id) &&
+                                                  !leaveIds.contains(id),
+                                            )
+                                            .toList();
+                                        try {
+                                          await controller
+                                              .submitTeacherAttendance(
+                                                sessionId: session.id,
+                                                presentStudentIds: presentIds
+                                                    .toList(),
+                                                leaveStudentIds: leaveIds
+                                                    .toList(),
+                                                absentStudentIds: absentIds,
+                                              );
+                                          controller.clearTeacherDraft(
+                                            session.id,
+                                          );
+                                          controller.queuedTeacherSubmissions
+                                              .remove(session.id);
+                                          controller.queuedTeacherSubmissions
+                                              .refresh();
+                                          lastSyncAt = DateTime.now();
+                                          if (context.mounted) {
+                                            Navigator.of(context).pop();
+                                          }
+                                          await _showSaasDialog(
+                                            context: context,
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: <Widget>[
+                                                _dialogHeader(
+                                                  icon: Icons
+                                                      .check_circle_rounded,
+                                                  title: 'Attendance Submitted',
+                                                  subtitle:
+                                                      '${session.batchName} session has been saved.',
+                                                  accent: AppColors.success,
+                                                ),
+                                                const SizedBox(
+                                                  height: AppSpacing.md,
+                                                ),
+                                                Align(
+                                                  alignment:
+                                                      Alignment.centerRight,
+                                                  child: FilledButton(
+                                                    onPressed: () {
+                                                      _closeActiveDialog();
+                                                      controller
+                                                          .updateMobileTab(2);
+                                                    },
+                                                    child: const Text(
+                                                      'View History',
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        } catch (e) {
+                                          controller.queueTeacherSubmission(
+                                            sessionId: session.id,
+                                            presentStudentIds: presentIds
+                                                .toList(),
+                                            leaveStudentIds: leaveIds.toList(),
+                                            absentStudentIds: absentIds,
+                                            reason: '$e',
+                                          );
+                                          controller.cacheTeacherDraft(
+                                            sessionId: session.id,
+                                            presentStudentIds: presentIds
+                                                .toList(),
+                                            leaveStudentIds: leaveIds.toList(),
+                                            search: searchController.text,
+                                            filter: statusFilter,
+                                          );
+                                          setState(() {
+                                            syncStatus = 'Queued for retry';
+                                            isSubmitting = false;
+                                            lastSyncAt = DateTime.now();
+                                          });
+                                          await _showErrorDialog(
+                                            context,
+                                            'Submission queued locally. Retry once internet is stable.\n$e',
+                                          );
+                                        }
+                                      },
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size(0, 40),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: Text(
+                                  isSubmitting ? 'Saving...' : 'Submit',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Align(
+                            alignment: Alignment.centerLeft,
                             child: Text(
-                              student.name,
+                              syncStatus,
+                              style: TextStyle(
+                                color:
+                                    controller.isQueuedTeacherSubmission(
+                                      session.id,
+                                    )
+                                    ? const Color(0xFFB45309)
+                                    : AppColors.success,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Last synced: ${lastSyncAt.hour.toString().padLeft(2, '0')}:${lastSyncAt.minute.toString().padLeft(2, '0')}',
                               style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                warningText = '';
-                                if (isPresent) {
-                                  presentIds.remove(student.id);
-                                  return;
-                                }
-                                if (presentIds.length >= session.presentCount) {
-                                  warningText =
-                                      'You can select max ${session.presentCount} students as Present.';
-                                  return;
-                                }
-                                presentIds.add(student.id);
-                                leaveIds.remove(student.id);
-                              });
-                            },
-                            style: TextButton.styleFrom(
-                              backgroundColor: isPresent
-                                  ? const Color(0xFFDCFCE7)
-                                  : const Color(0xFFF8FAFF),
-                            ),
-                            child: Text(
-                              'Present',
-                              style: TextStyle(
-                                color: isPresent
-                                    ? const Color(0xFF166534)
-                                    : AppColors.textSecondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                warningText = '';
-                                if (isLeave) {
-                                  leaveIds.remove(student.id);
-                                  return;
-                                }
-                                leaveIds.add(student.id);
-                                presentIds.remove(student.id);
-                              });
-                            },
-                            style: TextButton.styleFrom(
-                              backgroundColor: isLeave
-                                  ? const Color(0xFFFFF3DC)
-                                  : const Color(0xFFF8FAFF),
-                            ),
-                            child: Text(
-                              'Leave',
-                              style: TextStyle(
-                                color: isLeave
-                                    ? const Color(0xFF9A3412)
-                                    : AppColors.textSecondary,
-                                fontWeight: FontWeight.w600,
+                                color: AppColors.textSecondary,
+                                fontSize: 11,
                               ),
                             ),
                           ),
                         ],
                       ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Row(
-                children: <Widget>[
-                  OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  const Spacer(),
-                  FilledButton.icon(
-                    onPressed: () async {
-                      final List<String> allIds = students
-                          .map((student) => student.id)
-                          .toList();
-                      final List<String> absentIds = allIds
-                          .where(
-                            (String id) =>
-                                !presentIds.contains(id) &&
-                                !leaveIds.contains(id),
-                          )
-                          .toList();
-                      await controller.submitTeacherAttendance(
-                        sessionId: session.id,
-                        presentStudentIds: presentIds.toList(),
-                        leaveStudentIds: leaveIds.toList(),
-                        absentStudentIds: absentIds,
-                      );
-                      if (context.mounted) {
-                        Navigator.of(context).pop();
-                      }
-                    },
-                    icon: const Icon(Icons.check_rounded),
-                    label: const Text('Submit Session Attendance'),
-                  ),
-                ],
-              ),
-            ],
-          );
-        },
-      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
+    searchController.dispose();
   }
 
   Future<void> _openViewAttendanceDialog(
@@ -3077,6 +4838,31 @@ class AttendanceView extends StatelessWidget {
             accent: AppColors.accent,
           ),
           const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              _sessionMiniChip(
+                'Session',
+                session.id,
+                const Color(0xFFF3F4F6),
+                const Color(0xFF334155),
+              ),
+              _sessionMiniChip(
+                'Date',
+                _sessionDateLabel(session),
+                const Color(0xFFE8EEFF),
+                const Color(0xFF1E4ED8),
+              ),
+              _sessionMiniChip(
+                'Status',
+                session.status,
+                const Color(0xFFE8EEFF),
+                const Color(0xFF1E4ED8),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
           _attendanceGroup(
             title: 'Present (${presentNames.length})',
             names: presentNames,
@@ -3433,6 +5219,50 @@ class AttendanceView extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<bool> _confirmTeacherAttendanceSubmit({
+    required BuildContext context,
+    required String batchName,
+    required int present,
+    required int leave,
+    required int absent,
+    required int expectedTarget,
+  }) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Review Submission'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                batchName,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Text('Expected Present: $expectedTarget'),
+              Text('Present: $present'),
+              Text('Leave: $leave'),
+              Text('Absent: $absent'),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Back'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Submit'),
+            ),
+          ],
+        );
+      },
+    );
+    return confirm ?? false;
   }
 
   Future<void> _showErrorDialog(BuildContext context, String message) async {
