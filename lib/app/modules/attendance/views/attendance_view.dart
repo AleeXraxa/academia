@@ -2301,17 +2301,29 @@ class AttendanceView extends StatelessWidget {
                       if (controller.showMarkForm.value) {
                         return const SizedBox.shrink();
                       }
-                      return Align(
-                        alignment: Alignment.centerLeft,
-                        child: FilledButton.icon(
-                          onPressed: controller.openMarkForm,
-                          icon: const Icon(Icons.add_task_rounded),
-                          label: Text(
-                            isMobile
-                                ? 'Generate Session'
-                                : 'Generate Session for Today',
+                      return Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: <Widget>[
+                          FilledButton.icon(
+                            onPressed: controller.openMarkForm,
+                            icon: const Icon(Icons.add_task_rounded),
+                            label: Text(
+                              isMobile
+                                  ? 'Generate Session'
+                                  : 'Generate Session for Today',
+                            ),
                           ),
-                        ),
+                          OutlinedButton.icon(
+                            onPressed: controller.openExtraMarkForm,
+                            icon: const Icon(Icons.auto_fix_high_rounded),
+                            label: Text(
+                              isMobile
+                                  ? 'Generate Extra'
+                                  : 'Generate Extra Session Today',
+                            ),
+                          ),
+                        ],
                       );
                     }),
                   ],
@@ -2501,6 +2513,7 @@ class AttendanceView extends StatelessWidget {
       final List<BatchModel> scheduledBatches =
           controller.generationCandidateBatches;
       final int selectedCount = controller.selectedGenerationBatchIds.length;
+      final bool isExtraMode = controller.generationMode.value == 'extra';
       return Container(
         width: double.infinity,
         margin: const EdgeInsets.only(bottom: AppSpacing.md),
@@ -2520,15 +2533,19 @@ class AttendanceView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Text(
-              'Generate Sessions For Today',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            Text(
+              isExtraMode
+                  ? 'Generate Extra Sessions For Today'
+                  : 'Generate Sessions For Today',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 4),
             Text(
-              controller.isUsingScheduleFallback
-                  ? 'No day-pattern batches for today, showing active batches for manual generation.'
-                  : 'Select scheduled batches for today and enter present count for each selected batch.',
+              isExtraMode
+                  ? 'Select only unscheduled active batches for today and generate extra sessions.'
+                  : (controller.isUsingScheduleFallback
+                        ? 'No day-pattern batches for today, showing active batches for manual generation.'
+                        : 'Select scheduled batches for today and enter present count for each selected batch.'),
               style: const TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 12,
@@ -2553,8 +2570,10 @@ class AttendanceView extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: AppColors.border),
                 ),
-                child: const Text(
-                  'No batches are scheduled for today.',
+                child: Text(
+                  isExtraMode
+                      ? 'No unscheduled active batches available for extra session today.'
+                      : 'No batches are scheduled for today.',
                   style: TextStyle(
                     color: AppColors.textSecondary,
                     fontWeight: FontWeight.w500,
@@ -4097,9 +4116,21 @@ class AttendanceView extends StatelessWidget {
         days[2] == 'saturday') {
       return 'TTS';
     }
+    if (days.length == 6 &&
+        days[0] == 'monday' &&
+        days[1] == 'tuesday' &&
+        days[2] == 'wednesday' &&
+        days[3] == 'thursday' &&
+        days[4] == 'friday' &&
+        days[5] == 'saturday') {
+      return 'REGULAR';
+    }
 
     final String schedule = batch.schedule.trim().toUpperCase();
-    if (schedule == 'MWF' || schedule == 'TTS') {
+    if (schedule == 'MWF' ||
+        schedule == 'TTS' ||
+        schedule == 'REGULAR' ||
+        schedule == 'DAILY') {
       return schedule;
     }
 

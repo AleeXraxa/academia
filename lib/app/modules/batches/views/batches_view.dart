@@ -395,7 +395,18 @@ class BatchesView extends StatelessWidget {
       return '$baseSchedule | $timing';
     }
 
+    final bool isRegular =
+        days.length == 6 &&
+        days[0] == 'Monday' &&
+        days[1] == 'Tuesday' &&
+        days[2] == 'Wednesday' &&
+        days[3] == 'Thursday' &&
+        days[4] == 'Friday' &&
+        days[5] == 'Saturday';
     final String dayCode =
+        isRegular
+        ? 'REGULAR'
+        :
         days.length == 3 &&
             days[0] == 'Monday' &&
             days[1] == 'Wednesday' &&
@@ -555,6 +566,14 @@ class BatchesView extends StatelessWidget {
         batchDays[1] == 'Thursday' &&
         batchDays[2] == 'Saturday') {
       selectedDaysPattern = 'TTS';
+    } else if (batchDays.length == 6 &&
+        batchDays[0] == 'Monday' &&
+        batchDays[1] == 'Tuesday' &&
+        batchDays[2] == 'Wednesday' &&
+        batchDays[3] == 'Thursday' &&
+        batchDays[4] == 'Friday' &&
+        batchDays[5] == 'Saturday') {
+      selectedDaysPattern = 'Regular (Daily)';
     }
 
     const List<String> semesterOptions = <String>[
@@ -570,7 +589,11 @@ class BatchesView extends StatelessWidget {
       'OV-7144',
       'Other',
     ];
-    const List<String> dayPatternOptions = <String>['MWF', 'TTS'];
+    const List<String> dayPatternOptions = <String>[
+      'MWF',
+      'TTS',
+      'Regular (Daily)',
+    ];
     const List<String> timingOptions = <String>['3-5', '5-7', '7-9', 'Other'];
     const List<String> statusOptions = <String>['Active', 'Completed'];
 
@@ -812,6 +835,15 @@ class BatchesView extends StatelessWidget {
                                 ? <String>['Monday', 'Wednesday', 'Friday']
                                 : pattern == 'TTS'
                                 ? <String>['Tuesday', 'Thursday', 'Saturday']
+                                : pattern == 'Regular (Daily)'
+                                ? <String>[
+                                    'Monday',
+                                    'Tuesday',
+                                    'Wednesday',
+                                    'Thursday',
+                                    'Friday',
+                                    'Saturday',
+                                  ]
                                 : <String>[];
 
                             if (name.isEmpty ||
@@ -1070,7 +1102,11 @@ class BatchesView extends StatelessWidget {
       'OV-7144',
       'Other',
     ];
-    const List<String> dayPatternOptions = <String>['MWF', 'TTS'];
+    const List<String> dayPatternOptions = <String>[
+      'MWF',
+      'TTS',
+      'Regular (Daily)',
+    ];
     const List<String> timingOptions = <String>['3-5', '5-7', '7-9', 'Other'];
     final TextEditingController otherTimingController = TextEditingController();
 
@@ -1363,6 +1399,15 @@ class BatchesView extends StatelessWidget {
                                             ? <String>[
                                                 'Tuesday',
                                                 'Thursday',
+                                                'Saturday',
+                                              ]
+                                            : pattern == 'Regular (Daily)'
+                                            ? <String>[
+                                                'Monday',
+                                                'Tuesday',
+                                                'Wednesday',
+                                                'Thursday',
+                                                'Friday',
                                                 'Saturday',
                                               ]
                                             : <String>[];

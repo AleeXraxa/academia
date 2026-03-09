@@ -1,4 +1,6 @@
 import 'package:academia/app/modules/dashboard/controllers/dashboard_controller.dart';
+import 'package:academia/app/core/enums/user_role.dart';
+import 'package:academia/app/core/session/app_session.dart';
 import 'package:academia/app/routes/app_routes.dart';
 import 'package:academia/app/theme/app_colors.dart';
 import 'package:academia/app/theme/app_spacing.dart';
@@ -13,6 +15,8 @@ class DashboardView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final DashboardController controller = Get.put(DashboardController());
+    final UserRole role = Get.find<AppSession>().roleOrStaff;
+    final bool canViewReports = role == UserRole.cah;
 
     return AppShell(
       currentRoute: AppRoutes.dashboard,
@@ -21,11 +25,12 @@ class DashboardView extends StatelessWidget {
         subtitle:
             'Premium control center with live academic operations and status insights.',
         actions: <Widget>[
-          OutlinedButton.icon(
-            onPressed: () => Get.toNamed(AppRoutes.reports),
-            icon: const Icon(Icons.download_rounded),
-            label: const Text('Export Insights'),
-          ),
+          if (canViewReports)
+            OutlinedButton.icon(
+              onPressed: () => Get.toNamed(AppRoutes.reports),
+              icon: const Icon(Icons.download_rounded),
+              label: const Text('Export Insights'),
+            ),
           FilledButton.icon(
             onPressed: () => Get.toNamed(AppRoutes.attendance),
             icon: const Icon(Icons.fact_check_rounded),
@@ -126,7 +131,13 @@ class DashboardView extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              _entrance(delayMs: 90, child: _attendanceTrendCard(controller)),
+              _entrance(
+                delayMs: 90,
+                child: _attendanceTrendCard(
+                  controller,
+                  canViewReports: canViewReports,
+                ),
+              ),
               const SizedBox(height: AppSpacing.md),
               _entrance(
                 delayMs: 130,
@@ -136,18 +147,30 @@ class DashboardView extends StatelessWidget {
                     if (singleColumn) {
                       return Column(
                         children: <Widget>[
-                          _opsCard(controller),
+                          _opsCard(
+                            controller,
+                            canViewReports: canViewReports,
+                          ),
                           const SizedBox(height: AppSpacing.md),
-                          _workspaceCard(),
+                          _workspaceCard(canViewReports: canViewReports),
                         ],
                       );
                     }
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Expanded(flex: 6, child: _opsCard(controller)),
+                        Expanded(
+                          flex: 6,
+                          child: _opsCard(
+                            controller,
+                            canViewReports: canViewReports,
+                          ),
+                        ),
                         const SizedBox(width: AppSpacing.md),
-                        Expanded(flex: 5, child: _workspaceCard()),
+                        Expanded(
+                          flex: 5,
+                          child: _workspaceCard(canViewReports: canViewReports),
+                        ),
                       ],
                     );
                   },
@@ -160,7 +183,10 @@ class DashboardView extends StatelessWidget {
     );
   }
 
-  Widget _attendanceTrendCard(DashboardController controller) {
+  Widget _attendanceTrendCard(
+    DashboardController controller, {
+    required bool canViewReports,
+  }) {
     final List<WeekdayAttendancePoint> points =
         controller.weeklyAttendanceTrend;
     return _sectionCard(
@@ -196,10 +222,12 @@ class DashboardView extends StatelessWidget {
                 ),
                 itemBuilder: (BuildContext context, int index) {
                   final WeekdayAttendancePoint point = points[index];
-                  return _HoverLift(
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () => Get.toNamed(AppRoutes.reports),
+                    return _HoverLift(
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: canViewReports
+                            ? () => Get.toNamed(AppRoutes.reports)
+                            : null,
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -478,7 +506,10 @@ class DashboardView extends StatelessWidget {
     );
   }
 
-  Widget _opsCard(DashboardController controller) {
+  Widget _opsCard(
+    DashboardController controller, {
+    required bool canViewReports,
+  }) {
     return _sectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -499,7 +530,7 @@ class DashboardView extends StatelessWidget {
             secondary: '',
             accent: const Color(0xFF0F766E),
             icon: Icons.insights_rounded,
-            onTap: () => Get.toNamed(AppRoutes.reports),
+            onTap: canViewReports ? () => Get.toNamed(AppRoutes.reports) : null,
           ),
           const SizedBox(height: 10),
           _opsInsightCard(
@@ -616,7 +647,7 @@ class DashboardView extends StatelessWidget {
     );
   }
 
-  Widget _workspaceCard() {
+  Widget _workspaceCard({required bool canViewReports}) {
     return _sectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -660,11 +691,12 @@ class DashboardView extends StatelessWidget {
                 Icons.fact_check_rounded,
                 AppRoutes.users,
               ),
-              _moduleTile(
-                '+ View Reports',
-                Icons.bar_chart_rounded,
-                AppRoutes.reports,
-              ),
+              if (canViewReports)
+                _moduleTile(
+                  '+ View Reports',
+                  Icons.bar_chart_rounded,
+                  AppRoutes.reports,
+                ),
             ],
           ),
         ],

@@ -122,15 +122,20 @@ class UsersController extends GetxController {
     required String name,
     required String email,
     required String role,
+    required String status,
   }) async {
     final String normalizedRole = role.trim();
-    _ensureRoleManagementAllowed(normalizedRole);
+    final String normalizedId = id.trim();
+    final String normalizedStatusInput = status.trim().toLowerCase();
+    final String storedStatus = normalizedStatusInput == 'block'
+        ? 'blocked'
+        : 'approved';
     final DocumentReference<Map<String, dynamic>> userDoc = _firestore
         .collection('users')
-        .doc(id);
+        .doc(normalizedId);
     final DocumentReference<Map<String, dynamic>> teacherDoc = _firestore
         .collection('teachers')
-        .doc(id);
+        .doc(normalizedId);
     final DocumentSnapshot<Map<String, dynamic>> teacherSnapshot =
         await teacherDoc.get();
 
@@ -138,8 +143,25 @@ class UsersController extends GetxController {
         await userDoc.get();
     final String previousRole =
         (currentSnapshot.data()?['role'] as String? ?? '').trim();
+    _ensureStatusManagementAllowed(
+      targetRole: previousRole,
+      requestedStoredStatus: storedStatus,
+      isSelfEdit: _isCurrentUser(normalizedId),
+    );
+    final bool isSelfEdit = _isCurrentUser(normalizedId);
+    final bool isAdminSelfEditKeepingRole =
+        _session.roleOrStaff == UserRole.administrator &&
+        isSelfEdit &&
+        _isAdminRole(previousRole) &&
+        _isAdminRole(normalizedRole);
+
+    if (!isAdminSelfEditKeepingRole) {
+      _ensureRoleManagementAllowed(normalizedRole);
+    }
+
     if (_session.roleOrStaff == UserRole.administrator &&
-        previousRole.toUpperCase() != 'TEACHER') {
+        previousRole.toUpperCase() != 'TEACHER' &&
+        !isSelfEdit) {
       throw Exception(
         'Administrator can update Teacher accounts only.',
       );
@@ -150,6 +172,7 @@ class UsersController extends GetxController {
       'name': name.trim(),
       'email': email.trim().toLowerCase(),
       'role': normalizedRole,
+      'status': storedStatus,
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
@@ -160,7 +183,7 @@ class UsersController extends GetxController {
           'name': name.trim(),
           'email': email.trim().toLowerCase(),
           'role': normalizedRole,
-          'status': (currentSnapshot.data()?['status'] as String?) ?? 'approved',
+          'status': storedStatus,
           'expertise': teacherSnapshot.data()?['expertise'] ?? '',
           'education': teacherSnapshot.data()?['education'] ?? '',
           'experience': teacherSnapshot.data()?['experience'] ?? '',
@@ -223,13 +246,64 @@ class UsersController extends GetxController {
     }
   }
 
-  Future<void> deleteUser(String id) async {
+  Future<void> deleteUser({
+    required String id,
+    required String password,
+  }) async {
+    final String normalizedId = id.trim();
+    final String normalizedPassword = password.trim();
+    if (normalizedId.isEmpty) {
+      throw Exception('Invalid user account.');
+    }
+    if (normalizedPassword.isEmpty) {
+      throw Exception('Password is required to delete auth account.');
+    }
+
     final DocumentReference<Map<String, dynamic>> userDoc = _firestore
         .collection('users')
-        .doc(id);
+        .doc(normalizedId);
     final DocumentReference<Map<String, dynamic>> teacherDoc = _firestore
         .collection('teachers')
-        .doc(id);
+        .doc(normalizedId);
+    final DocumentSnapshot<Map<String, dynamic>> userSnapshot = await userDoc
+        .get();
+    final String targetRole =
+        (userSnapshot.data()?['role'] as String? ?? '').trim().toUpperCase();
+    if (_session.roleOrStaff == UserRole.administrator &&
+        targetRole != 'TEACHER') {
+      throw Exception(
+        'Administrator can delete Teacher accounts only.',
+      );
+    }
+    final String email = (userSnapshot.data()?['email'] as String? ?? '')
+        .trim()
+        .toLowerCase();
+    if (email.isEmpty) {
+      throw Exception('User email not found. Cannot delete auth account.');
+    }
+
+    final FirebaseAuth secondaryAuth = await _ensureSecondaryAuth();
+    try {
+      final UserCredential credential = await secondaryAuth
+          .signInWithEmailAndPassword(email: email, password: normalizedPassword);
+      final User? targetUser = credential.user;
+      if (targetUser == null) {
+        throw Exception('Unable to verify auth account for deletion.');
+      }
+      await targetUser.delete();
+    } on FirebaseAuthException catch (e) {
+      String message = 'Unable to delete auth account.';
+      if (e.code == 'invalid-credential' ||
+          e.code == 'wrong-password' ||
+          e.code == 'invalid-login-credentials') {
+        message = 'Invalid user password. Auth account was not deleted.';
+      } else if (e.code == 'user-not-found') {
+        message = 'Auth account not found.';
+      }
+      throw Exception(message);
+    } finally {
+      await secondaryAuth.signOut();
+    }
 
     final WriteBatch batch = _firestore.batch();
     batch.delete(userDoc);
@@ -239,6 +313,42 @@ class UsersController extends GetxController {
 
   bool _isTeacherRole(String role) {
     return role.trim().toUpperCase() == 'TEACHER';
+  }
+
+  bool _isAdminRole(String role) {
+    final String upper = role.trim().toUpperCase();
+    return upper == 'ADMIN' || upper == 'ADMINISTRATOR';
+  }
+
+  bool _isCurrentUser(String id) {
+    final String currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    return currentUid.trim().isNotEmpty && currentUid.trim() == id.trim();
+  }
+
+  void _ensureStatusManagementAllowed({
+    required String targetRole,
+    required String requestedStoredStatus,
+    required bool isSelfEdit,
+  }) {
+    final String normalizedRequested = requestedStoredStatus
+        .trim()
+        .toLowerCase();
+    if (normalizedRequested != 'blocked') {
+      return;
+    }
+    if (_session.roleOrStaff == UserRole.cah ||
+        _session.roleOrStaff == UserRole.superAdmin) {
+      return;
+    }
+    if (_session.roleOrStaff != UserRole.administrator) {
+      throw Exception('You are not allowed to update user status.');
+    }
+    if (isSelfEdit) {
+      throw Exception('Administrator cannot block own account.');
+    }
+    if (!_isTeacherRole(targetRole)) {
+      throw Exception('Administrator can block Teacher accounts only.');
+    }
   }
 
   Future<FirebaseAuth> _ensureSecondaryAuth() async {

@@ -5,6 +5,7 @@ import 'package:academia/app/theme/app_colors.dart';
 import 'package:academia/app/theme/app_spacing.dart';
 import 'package:academia/app/widgets/common/app_page_scaffold.dart';
 import 'package:academia/app/widgets/layout/app_shell.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -243,6 +244,7 @@ class UsersView extends StatelessWidget {
 
     final String normalizedStatus = user.status.trim().toLowerCase();
     final bool canEdit = _canEditUser(controller, user);
+    final bool canDelete = _canDeleteUser(controller, user);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
@@ -349,9 +351,15 @@ class UsersView extends StatelessWidget {
                 _actionButton(
                   label: 'Delete',
                   icon: Icons.delete_outline,
-                  bg: const Color(0xFFFCE7E7),
-                  fg: const Color(0xFFB42318),
-                  onTap: () => _openDeleteDialog(context, controller, user),
+                  bg: canDelete
+                      ? const Color(0xFFFCE7E7)
+                      : const Color(0xFFF3F4F6),
+                  fg: canDelete
+                      ? const Color(0xFFB42318)
+                      : const Color(0xFF9CA3AF),
+                  onTap: canDelete
+                      ? () => _openDeleteDialog(context, controller, user)
+                      : () {},
                 ),
               ],
             ),
@@ -443,6 +451,13 @@ class UsersView extends StatelessWidget {
           background: const Color(0xFFFDE7E7),
           foreground: const Color(0xFFB42318),
         );
+      case 'blocked':
+      case 'block':
+        return _pill(
+          label: 'Blocked',
+          background: const Color(0xFFFDE7E7),
+          foreground: const Color(0xFFB42318),
+        );
       default:
         return _pill(
           label: _capitalize(status),
@@ -493,6 +508,7 @@ class UsersView extends StatelessWidget {
             required String name,
             required String email,
             required String role,
+            required String status,
             String? password,
           }) async {
             await controller.createUser(
@@ -510,6 +526,11 @@ class UsersView extends StatelessWidget {
     UsersController controller,
     UserModel user,
   ) async {
+    final bool isAdministratorActor =
+        controller.assignableRoles.length == 1 &&
+        controller.assignableRoles.first.trim().toUpperCase() == 'TEACHER';
+    final bool canBlockTarget =
+        !isAdministratorActor || user.role.trim().toUpperCase() == 'TEACHER';
     await _openUserFormDialog(
       context: context,
       title: 'Edit User',
@@ -517,12 +538,17 @@ class UsersView extends StatelessWidget {
       initialName: user.name,
       initialEmail: user.email,
       initialRole: user.role,
+      initialStatus: _toEditStatus(user.status),
+      statusOptionsOverride: canBlockTarget
+          ? const <String>['Active', 'Block']
+          : const <String>['Active'],
       includePassword: false,
       onSubmit:
           ({
             required String name,
             required String email,
             required String role,
+            required String status,
             String? password,
           }) async {
             await controller.updateUser(
@@ -530,6 +556,7 @@ class UsersView extends StatelessWidget {
               name: name,
               email: email,
               role: role,
+              status: status,
             );
           },
     );
@@ -543,6 +570,7 @@ class UsersView extends StatelessWidget {
       required String name,
       required String email,
       required String role,
+      required String status,
       String? password,
     })
     onSubmit,
@@ -550,6 +578,8 @@ class UsersView extends StatelessWidget {
     String initialName = '',
     String initialEmail = '',
     String initialRole = 'Teacher',
+    String initialStatus = 'Active',
+    List<String>? statusOptionsOverride,
   }) async {
     final TextEditingController nameController = TextEditingController(
       text: initialName,
@@ -559,13 +589,30 @@ class UsersView extends StatelessWidget {
     );
     final TextEditingController passwordController = TextEditingController();
     final UsersController usersController = Get.find<UsersController>();
-    final List<String> roleOptions = usersController.assignableRoles;
+    final List<String> roleOptions = <String>[...usersController.assignableRoles];
     if (roleOptions.isEmpty) {
       return;
+    }
+    final bool initialRoleAssignable = roleOptions
+        .map((String role) => role.trim().toUpperCase())
+        .contains(initialRole.trim().toUpperCase());
+    if (initialRole.trim().isNotEmpty && !initialRoleAssignable) {
+      roleOptions.insert(0, initialRole);
+    }
+    final bool roleLocked = !includePassword && !initialRoleAssignable;
+    final List<String> statusOptions =
+        statusOptionsOverride == null || statusOptionsOverride.isEmpty
+        ? <String>['Active', 'Block']
+        : <String>[...statusOptionsOverride];
+    if (!statusOptions.contains(initialStatus)) {
+      statusOptions.insert(0, initialStatus);
     }
     String selectedRole = roleOptions.contains(initialRole)
         ? initialRole
         : roleOptions.first;
+    String selectedStatus = statusOptions.contains(initialStatus)
+        ? initialStatus
+        : 'Active';
 
     await _showSaasDialog(
       context: context,
@@ -624,15 +671,43 @@ class UsersView extends StatelessWidget {
                           ),
                         )
                         .toList(),
-                    onChanged: (String? value) {
-                      if (value == null) {
-                        return;
-                      }
-                      setState(() {
-                        selectedRole = value;
-                      });
-                    },
+                    onChanged: roleLocked
+                        ? null
+                        : (String? value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setState(() {
+                              selectedRole = value;
+                            });
+                          },
                   ),
+                  if (!includePassword) ...<Widget>[
+                    const SizedBox(height: AppSpacing.sm),
+                    DropdownButtonFormField<String>(
+                      value: selectedStatus,
+                      decoration: const InputDecoration(
+                        labelText: 'Status',
+                        prefixIcon: Icon(Icons.flag_rounded),
+                      ),
+                      items: statusOptions
+                          .map(
+                            (String status) => DropdownMenuItem<String>(
+                              value: status,
+                              child: Text(status),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (String? value) {
+                        if (value == null) {
+                          return;
+                        }
+                        setState(() {
+                          selectedStatus = value;
+                        });
+                      },
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.md),
                   Row(
                     children: <Widget>[
@@ -685,6 +760,7 @@ class UsersView extends StatelessWidget {
                               name: name,
                               email: email,
                               role: selectedRole,
+                              status: includePassword ? 'Active' : selectedStatus,
                               password: includePassword ? password : null,
                             );
                             if (context.mounted) {
@@ -703,7 +779,7 @@ class UsersView extends StatelessWidget {
                                   _dialogHeader(
                                     icon: Icons.error_outline_rounded,
                                     title: 'Action Not Allowed',
-                                    subtitle: 'Role permission check failed.',
+                                    subtitle: 'Permission check failed.',
                                     accent: AppColors.error,
                                   ),
                                   const SizedBox(height: AppSpacing.md),
@@ -802,53 +878,115 @@ class UsersView extends StatelessWidget {
     UsersController controller,
     UserModel user,
   ) async {
+    final TextEditingController passwordController = TextEditingController();
+    String? errorText;
+    bool isDeleting = false;
     await _showSaasDialog(
       context: context,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          _dialogHeader(
-            icon: Icons.delete_outline_rounded,
-            title: 'Delete User',
-            subtitle: 'This action is permanent and cannot be undone.',
-            accent: AppColors.error,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF5F5),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFF5D0D0)),
-            ),
-            child: Text(
-              'Delete ${user.name} (${user.email}) from access directory?',
-              style: const TextStyle(color: AppColors.textPrimary, height: 1.4),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Row(
+      child: StatefulBuilder(
+        builder: (BuildContext dialogContext, void Function(void Function()) setState) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              OutlinedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
+              _dialogHeader(
+                icon: Icons.delete_outline_rounded,
+                title: 'Delete User',
+                subtitle:
+                    'This will delete both Firebase Auth and Firestore records.',
+                accent: AppColors.error,
               ),
-              const Spacer(),
-              FilledButton.icon(
-                onPressed: () async {
-                  await controller.deleteUser(user.id);
-                  Navigator.of(context).pop();
-                },
-                style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-                icon: const Icon(Icons.delete_rounded),
-                label: const Text('Delete User'),
+              const SizedBox(height: AppSpacing.md),
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF5F5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFF5D0D0)),
+                ),
+                child: Text(
+                  'Delete ${user.name} (${user.email}) from access directory?',
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'User Password',
+                  hintText: 'Enter this user\'s password',
+                  errorText: errorText,
+                  prefixIcon: const Icon(Icons.lock_outline_rounded),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                children: <Widget>[
+                  OutlinedButton(
+                    onPressed: isDeleting
+                        ? null
+                        : () => Navigator.of(dialogContext).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  const Spacer(),
+                  FilledButton.icon(
+                    onPressed: isDeleting
+                        ? null
+                        : () async {
+                            final String password = passwordController.text
+                                .trim();
+                            if (password.isEmpty) {
+                              setState(() {
+                                errorText = 'Password is required.';
+                              });
+                              return;
+                            }
+                            setState(() {
+                              isDeleting = true;
+                              errorText = null;
+                            });
+                            try {
+                              await controller.deleteUser(
+                                id: user.id,
+                                password: password,
+                              );
+                              if (dialogContext.mounted) {
+                                Navigator.of(dialogContext).pop();
+                              }
+                            } catch (e) {
+                              if (!dialogContext.mounted) {
+                                return;
+                              }
+                              setState(() {
+                                isDeleting = false;
+                                errorText = '$e'.replaceFirst('Exception: ', '');
+                              });
+                            }
+                          },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.error,
+                    ),
+                    icon: isDeleting
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.delete_rounded),
+                    label: Text(isDeleting ? 'Deleting...' : 'Delete User'),
+                  ),
+                ],
               ),
             ],
-          ),
-        ],
+          );
+        },
       ),
     );
+    passwordController.dispose();
   }
 
   Future<void> _showSaasDialog({
@@ -987,7 +1125,29 @@ class UsersView extends StatelessWidget {
     return value[0].toUpperCase() + value.substring(1).toLowerCase();
   }
 
+  String _toEditStatus(String status) {
+    final String normalized = status.trim().toLowerCase();
+    if (normalized == 'blocked' || normalized == 'block') {
+      return 'Block';
+    }
+    return 'Active';
+  }
+
   bool _canEditUser(UsersController controller, UserModel user) {
+    final String currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    if (controller.assignableRoles.length == 1 &&
+        controller.assignableRoles.first.trim().toUpperCase() == 'TEACHER' &&
+        currentUid.trim().isNotEmpty &&
+        currentUid.trim() == user.id.trim()) {
+      return true;
+    }
+    final List<String> roles = controller.assignableRoles
+        .map((String role) => role.trim().toUpperCase())
+        .toList();
+    return roles.contains(user.role.trim().toUpperCase());
+  }
+
+  bool _canDeleteUser(UsersController controller, UserModel user) {
     final List<String> roles = controller.assignableRoles
         .map((String role) => role.trim().toUpperCase())
         .toList();

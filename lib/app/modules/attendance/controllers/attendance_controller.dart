@@ -31,6 +31,7 @@ class AttendanceController extends GetxController {
   final RxString tableSortBy = 'batch'.obs;
   final RxBool tableSortAscending = true.obs;
   final RxBool showMarkForm = false.obs;
+  final RxString generationMode = 'scheduled'.obs;
   final RxInt mobileTabIndex = 0.obs;
   final RxInt historyRangeDays = 7.obs;
   final RxString historyBatchId = ''.obs;
@@ -85,6 +86,18 @@ class AttendanceController extends GetxController {
   }
 
   void openMarkForm() {
+    generationMode.value = 'scheduled';
+    showMarkForm.value = true;
+    try {
+      _prepareGenerationState();
+    } catch (_) {
+      selectedGenerationBatchIds.clear();
+      generationPresentByBatchId.clear();
+    }
+  }
+
+  void openExtraMarkForm() {
+    generationMode.value = 'extra';
     showMarkForm.value = true;
     try {
       _prepareGenerationState();
@@ -564,6 +577,7 @@ class AttendanceController extends GetxController {
 
   void closeMarkForm() {
     showMarkForm.value = false;
+    generationMode.value = 'scheduled';
     selectedGenerationBatchIds.clear();
     generationPresentByBatchId.clear();
     selectedBatchId.value = '';
@@ -575,7 +589,19 @@ class AttendanceController extends GetxController {
     return batches.where(_isBatchScheduledToday).toList();
   }
 
+  List<BatchModel> get todayUnscheduledActiveBatches {
+    return batches
+        .where(
+          (BatchModel batch) =>
+              _isBatchActiveForGeneration(batch) && !_isBatchScheduledToday(batch),
+        )
+        .toList();
+  }
+
   List<BatchModel> get generationCandidateBatches {
+    if (generationMode.value == 'extra') {
+      return todayUnscheduledActiveBatches;
+    }
     final List<BatchModel> scheduled = todayScheduledBatches;
     if (scheduled.isNotEmpty) {
       return scheduled;
@@ -665,6 +691,11 @@ class AttendanceController extends GetxController {
         throw Exception('Session already generated for the $batchName batch');
       }
       final int totalStudents = selectedBatchStudentsCount;
+      if (totalStudents <= 0) {
+        throw Exception(
+          'Cannot generate session for $batchName because no students are assigned to this batch yet.',
+        );
+      }
       if (presentCount > totalStudents) {
         throw Exception(
           'Present count cannot exceed batch size ($totalStudents).',
@@ -740,6 +771,11 @@ class AttendanceController extends GetxController {
           );
         }
         final int totalStudents = batch.studentsCount ?? 0;
+        if (totalStudents <= 0) {
+          throw Exception(
+            'Cannot generate session for ${batch.name} because this batch has 0 students. Please assign students first.',
+          );
+        }
         if (presentCount > totalStudents) {
           throw Exception(
             'Present count cannot exceed batch size ($totalStudents) for ${batch.name}.',
@@ -1147,6 +1183,11 @@ class AttendanceController extends GetxController {
           weekday == DateTime.thursday ||
           weekday == DateTime.saturday;
     }
+    if (schedule == 'REGULAR' ||
+        schedule == 'DAILY' ||
+        schedule == 'MONDAY-TUESDAY-WEDNESDAY-THURSDAY-FRIDAY-SATURDAY') {
+      return weekday >= DateTime.monday && weekday <= DateTime.saturday;
+    }
 
     if (days.length == 3 &&
         days[0] == 'monday' &&
@@ -1163,6 +1204,15 @@ class AttendanceController extends GetxController {
       return weekday == DateTime.tuesday ||
           weekday == DateTime.thursday ||
           weekday == DateTime.saturday;
+    }
+    if (days.length == 6 &&
+        days[0] == 'monday' &&
+        days[1] == 'tuesday' &&
+        days[2] == 'wednesday' &&
+        days[3] == 'thursday' &&
+        days[4] == 'friday' &&
+        days[5] == 'saturday') {
+      return weekday >= DateTime.monday && weekday <= DateTime.saturday;
     }
 
     return false;

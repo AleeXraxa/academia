@@ -63,6 +63,15 @@ class LoginController extends GetxController {
         );
         return;
       }
+      if (normalizedStatus == 'blocked' || normalizedStatus == 'block') {
+        await _authService.logout();
+        await AppMessageDialog.showError(
+          title: 'Account Blocked',
+          message:
+              'Your account is blocked. Please contact CAH or Administrator.',
+        );
+        return;
+      }
 
       final UserRole role = _toRole(user.role);
       if (role == UserRole.teacher && !isMobile) {

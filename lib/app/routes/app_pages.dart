@@ -104,22 +104,14 @@ class AppPages {
       name: AppRoutes.reports,
       page: () => _guardedPage(
         view: const ReportsView(),
-        allowedRoles: <UserRole>[
-          UserRole.superAdmin,
-          UserRole.administrator,
-          UserRole.cah,
-        ],
+        allowedRoles: <UserRole>[UserRole.cah],
       ),
     ),
     GetPage<dynamic>(
       name: AppRoutes.settings,
       page: () => _guardedPage(
         view: const SettingsView(),
-        allowedRoles: <UserRole>[
-          UserRole.superAdmin,
-          UserRole.administrator,
-          UserRole.cah,
-        ],
+        allowedRoles: <UserRole>[UserRole.cah],
       ),
     ),
   ];

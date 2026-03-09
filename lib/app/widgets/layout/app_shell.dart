@@ -106,6 +106,7 @@ class _Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final UserRole role = Get.find<AppSession>().roleOrStaff;
     final List<_SidebarItemData> items = <_SidebarItemData>[
       _SidebarItemData(
         icon: Icons.grid_view_rounded,
@@ -133,21 +134,25 @@ class _Sidebar extends StatelessWidget {
         route: AppRoutes.students,
       ),
       _SidebarItemData(
-        icon: Icons.bar_chart_rounded,
-        label: 'Reports',
-        route: AppRoutes.reports,
-      ),
-      _SidebarItemData(
         icon: Icons.manage_accounts_rounded,
         label: 'Users',
         route: AppRoutes.users,
       ),
-      _SidebarItemData(
-        icon: Icons.settings_rounded,
-        label: 'Settings',
-        route: AppRoutes.settings,
-      ),
     ];
+    if (role == UserRole.cah) {
+      items.addAll(<_SidebarItemData>[
+        _SidebarItemData(
+          icon: Icons.bar_chart_rounded,
+          label: 'Reports',
+          route: AppRoutes.reports,
+        ),
+        _SidebarItemData(
+          icon: Icons.settings_rounded,
+          label: 'Settings',
+          route: AppRoutes.settings,
+        ),
+      ]);
+    }
 
     return Container(
       width: 246,

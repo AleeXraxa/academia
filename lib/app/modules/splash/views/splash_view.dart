@@ -67,7 +67,10 @@ class _SplashViewState extends State<SplashView>
       }
 
       final String status = user.status.trim().toLowerCase();
-      if (status == 'pending' || status == 'rejected') {
+      if (status == 'pending' ||
+          status == 'rejected' ||
+          status == 'blocked' ||
+          status == 'block') {
         await _authService.logout();
         Get.find<AppSession>().clear();
         return AppRoutes.login;
