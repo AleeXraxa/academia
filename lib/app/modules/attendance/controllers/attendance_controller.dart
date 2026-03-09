@@ -34,6 +34,7 @@ class AttendanceController extends GetxController {
   final RxString generationMode = 'scheduled'.obs;
   final RxInt mobileTabIndex = 0.obs;
   final RxInt historyRangeDays = 7.obs;
+  final RxInt historyPageSize = 20.obs;
   final RxString historyBatchId = ''.obs;
   final RxString historyTeacherId = ''.obs;
   final RxString historyStatus = ''.obs;
@@ -49,10 +50,14 @@ class AttendanceController extends GetxController {
       <String, TeacherAttendanceDraft>{}.obs;
   final RxMap<String, QueuedTeacherSubmission> queuedTeacherSubmissions =
       <String, QueuedTeacherSubmission>{}.obs;
+  final RxBool requireCorrectionNote = true.obs;
 
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _batchesSubscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _todaySubscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _historySubscription;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+  _settingsSubscription;
+  static const int _historyPageStep = 20;
 
   String get todayKey {
     final DateTime now = DateTime.now();
@@ -80,6 +85,7 @@ class AttendanceController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    _listenAttendancePolicy();
     _listenBatches();
     _listenTodaySessions();
     _listenHistorySessions();
@@ -171,22 +177,42 @@ class AttendanceController extends GetxController {
 
   void updateHistoryRangeDays(int days) {
     historyRangeDays.value = days;
+    resetHistoryPagination();
   }
 
   void updateHistoryBatchId(String batchId) {
     historyBatchId.value = batchId.trim();
+    resetHistoryPagination();
   }
 
   void updateHistoryTeacherId(String teacherId) {
     historyTeacherId.value = teacherId.trim();
+    resetHistoryPagination();
   }
 
   void updateHistoryStatus(String status) {
     historyStatus.value = status.trim().toLowerCase();
+    resetHistoryPagination();
   }
 
   void updateHistorySearch(String search) {
     historySearch.value = search.trim().toLowerCase();
+    resetHistoryPagination();
+  }
+
+  void resetHistoryPagination() {
+    historyPageSize.value = _historyPageStep;
+  }
+
+  void loadMoreHistorySessions() {
+    final int total = filteredHistorySessions.length;
+    if (historyPageSize.value >= total) {
+      return;
+    }
+    historyPageSize.value = (historyPageSize.value + _historyPageStep).clamp(
+      0,
+      total,
+    );
   }
 
   List<BatchModel> get teacherAssignedBatches {
@@ -429,60 +455,52 @@ class AttendanceController extends GetxController {
   }
 
   List<AdminAttendanceSession> get filteredHistorySessions {
-    final int rangeDays = historyRangeDays.value;
-    final String selectedBatch = historyBatchId.value.trim();
-    final String selectedTeacherId = historyTeacherId.value.trim();
-    final String selectedStatus = historyStatus.value.trim().toLowerCase();
-    final String search = historySearch.value.trim().toLowerCase();
-    final DateTime now = DateTime.now();
-    final DateTime startDate = rangeDays <= 0
-        ? DateTime(2000, 1, 1)
-        : DateTime(
-            now.year,
-            now.month,
-            now.day,
-          ).subtract(Duration(days: rangeDays - 1));
-
-    final List<AdminAttendanceSession> filtered = historySessions.where((
-      AdminAttendanceSession session,
-    ) {
-      final bool batchMatch =
-          selectedBatch.isEmpty || session.batchId.trim() == selectedBatch;
-      final bool teacherMatch =
-          selectedTeacherId.isEmpty ||
-          _teacherIdForBatch(session.batchId) == selectedTeacherId;
-      final bool statusMatch =
-          selectedStatus.isEmpty ||
-          session.status.trim().toLowerCase() == selectedStatus;
-      final bool searchMatch =
-          search.isEmpty ||
-          session.batchName.toLowerCase().contains(search) ||
-          session.id.toLowerCase().contains(search);
-      final DateTime sessionDate =
-          session.date ??
-          DateTime.tryParse('${session.dateKey} 00:00:00') ??
-          DateTime(2000, 1, 1);
-      final bool dateMatch = rangeDays <= 0 || !sessionDate.isBefore(startDate);
-      return batchMatch &&
-          teacherMatch &&
-          statusMatch &&
-          searchMatch &&
-          dateMatch;
-    }).toList();
-
-    filtered.sort((AdminAttendanceSession a, AdminAttendanceSession b) {
-      final DateTime ad =
-          a.date ??
-          DateTime.tryParse('${a.dateKey} 00:00:00') ??
-          DateTime(2000, 1, 1);
-      final DateTime bd =
-          b.date ??
-          DateTime.tryParse('${b.dateKey} 00:00:00') ??
-          DateTime(2000, 1, 1);
-      return bd.compareTo(ad);
-    });
-    return filtered;
+    return AttendanceHistoryQuery.apply(
+      sessions: historySessions,
+      rangeDays: historyRangeDays.value,
+      selectedBatch: historyBatchId.value.trim(),
+      selectedTeacherId: historyTeacherId.value.trim(),
+      selectedStatus: historyStatus.value.trim().toLowerCase(),
+      search: historySearch.value.trim().toLowerCase(),
+      teacherIdForBatch: _teacherIdForBatch,
+    );
   }
+
+  List<AdminAttendanceSession> get pagedHistorySessions {
+    final List<AdminAttendanceSession> filtered = filteredHistorySessions;
+    if (filtered.length <= historyPageSize.value) {
+      return filtered;
+    }
+    return filtered.take(historyPageSize.value).toList();
+  }
+
+  bool get hasMoreHistorySessions {
+    return filteredHistorySessions.length > pagedHistorySessions.length;
+  }
+
+  int get historyCorrectedSessionsCount => filteredHistorySessions.where((
+    AdminAttendanceSession session,
+  ) {
+    return session.auditLogs.isNotEmpty;
+  }).length;
+
+  int get historyHighAbsenceSessionCount => filteredHistorySessions.where((
+    AdminAttendanceSession session,
+  ) {
+    if (session.totalStudents <= 0) {
+      return false;
+    }
+    return (session.absentCount / session.totalStudents) >= 0.3;
+  }).length;
+
+  List<String> get historyAbsentStreakStudentIds {
+    return AttendanceHistoryInsights.absentStreakStudentIds(
+      sessions: filteredHistorySessions,
+      minDays: 3,
+    );
+  }
+
+  int get historyAbsentStreakStudentsCount => historyAbsentStreakStudentIds.length;
 
   int get historyTotalSessions => filteredHistorySessions.length;
   int get historyTotalPresent => filteredHistorySessions.fold<int>(
@@ -1010,6 +1028,13 @@ class AttendanceController extends GetxController {
     required List<String> leaveStudentIds,
     required String note,
   }) async {
+    final String trimmedNote = note.trim();
+    if (requireCorrectionNote.value && trimmedNote.isEmpty) {
+      throw Exception(
+        'Correction note is required by settings. Please enter a reason before saving.',
+      );
+    }
+
     final Set<String> presentSet = presentStudentIds
         .map((String id) => id.trim())
         .where((String id) => id.isNotEmpty)
@@ -1045,7 +1070,7 @@ class AttendanceController extends GetxController {
       'action': 'admin_correction',
       'uid': uid,
       'role': role,
-      'note': note.trim(),
+      'note': trimmedNote,
       'presentCount': presentCount,
       'leaveCount': leaveCount,
       'absentCount': absentCount,
@@ -1096,6 +1121,25 @@ class AttendanceController extends GetxController {
     );
   }
 
+  void _listenAttendancePolicy() {
+    _settingsSubscription?.cancel();
+    _settingsSubscription = FirebaseFirestore.instance
+        .collection('app_settings')
+        .doc('general')
+        .snapshots()
+        .listen(
+          (DocumentSnapshot<Map<String, dynamic>> snapshot) {
+            final Map<String, dynamic> map =
+                snapshot.data() ?? <String, dynamic>{};
+            requireCorrectionNote.value =
+                (map['requireCorrectionNote'] as bool?) ?? true;
+          },
+          onError: (_) {
+            requireCorrectionNote.value = true;
+          },
+        );
+  }
+
   void _listenTodaySessions() {
     _todaySubscription?.cancel();
     _todaySubscription = _attendanceService
@@ -1131,6 +1175,9 @@ class AttendanceController extends GetxController {
             ..clear()
             ..addAll(mapped);
           _applySessionVisibility();
+          if (historyPageSize.value < _historyPageStep) {
+            resetHistoryPagination();
+          }
         }, onError: (_) {
           errorText.value = 'Unable to load attendance history.';
         });
@@ -1295,7 +1342,129 @@ class AttendanceController extends GetxController {
     _batchesSubscription?.cancel();
     _todaySubscription?.cancel();
     _historySubscription?.cancel();
+    _settingsSubscription?.cancel();
     super.onClose();
+  }
+}
+
+class AttendanceHistoryQuery {
+  static List<AdminAttendanceSession> apply({
+    required List<AdminAttendanceSession> sessions,
+    required int rangeDays,
+    required String selectedBatch,
+    required String selectedTeacherId,
+    required String selectedStatus,
+    required String search,
+    required String Function(String batchId) teacherIdForBatch,
+  }) {
+    final DateTime now = DateTime.now();
+    final DateTime startDate = rangeDays <= 0
+        ? DateTime(2000, 1, 1)
+        : DateTime(
+            now.year,
+            now.month,
+            now.day,
+          ).subtract(Duration(days: rangeDays - 1));
+
+    final List<AdminAttendanceSession> filtered = sessions.where((
+      AdminAttendanceSession session,
+    ) {
+      final bool batchMatch =
+          selectedBatch.isEmpty || session.batchId.trim() == selectedBatch;
+      final bool teacherMatch =
+          selectedTeacherId.isEmpty ||
+          teacherIdForBatch(session.batchId) == selectedTeacherId;
+      final bool statusMatch =
+          selectedStatus.isEmpty ||
+          session.status.trim().toLowerCase() == selectedStatus;
+      final bool searchMatch =
+          search.isEmpty ||
+          session.batchName.toLowerCase().contains(search) ||
+          session.id.toLowerCase().contains(search);
+      final DateTime sessionDate =
+          session.date ??
+          DateTime.tryParse('${session.dateKey} 00:00:00') ??
+          DateTime(2000, 1, 1);
+      final bool dateMatch = rangeDays <= 0 || !sessionDate.isBefore(startDate);
+      return batchMatch &&
+          teacherMatch &&
+          statusMatch &&
+          searchMatch &&
+          dateMatch;
+    }).toList();
+
+    filtered.sort((AdminAttendanceSession a, AdminAttendanceSession b) {
+      final DateTime ad =
+          a.date ??
+          DateTime.tryParse('${a.dateKey} 00:00:00') ??
+          DateTime(2000, 1, 1);
+      final DateTime bd =
+          b.date ??
+          DateTime.tryParse('${b.dateKey} 00:00:00') ??
+          DateTime(2000, 1, 1);
+      return bd.compareTo(ad);
+    });
+    return filtered;
+  }
+}
+
+class AttendanceHistoryInsights {
+  static List<String> absentStreakStudentIds({
+    required List<AdminAttendanceSession> sessions,
+    int minDays = 3,
+  }) {
+    if (sessions.isEmpty || minDays <= 1) {
+      return <String>[];
+    }
+
+    final Map<String, Set<String>> absentByDateKey = <String, Set<String>>{};
+    for (final AdminAttendanceSession session in sessions) {
+      absentByDateKey
+          .putIfAbsent(session.dateKey, () => <String>{})
+          .addAll(session.absentStudentIds);
+    }
+
+    final List<DateTime> orderedDates = absentByDateKey.keys
+        .map((String key) => DateTime.tryParse('$key 00:00:00'))
+        .whereType<DateTime>()
+        .toList()
+      ..sort((DateTime a, DateTime b) => a.compareTo(b));
+    if (orderedDates.isEmpty) {
+      return <String>[];
+    }
+
+    final Map<String, int> streakByStudent = <String, int>{};
+    final Set<String> matched = <String>{};
+    DateTime? previousDate;
+    for (final DateTime date in orderedDates) {
+      final String dateKey =
+          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      final Set<String> absentToday = absentByDateKey[dateKey] ?? <String>{};
+
+      if (previousDate != null && date.difference(previousDate).inDays != 1) {
+        streakByStudent.clear();
+      }
+
+      final List<String> existingStudents = streakByStudent.keys.toList();
+      for (final String studentId in existingStudents) {
+        if (!absentToday.contains(studentId)) {
+          streakByStudent[studentId] = 0;
+        }
+      }
+
+      for (final String studentId in absentToday) {
+        final int next = (streakByStudent[studentId] ?? 0) + 1;
+        streakByStudent[studentId] = next;
+        if (next >= minDays) {
+          matched.add(studentId);
+        }
+      }
+
+      previousDate = date;
+    }
+
+    final List<String> ids = matched.toList()..sort();
+    return ids;
   }
 }
 
@@ -1315,6 +1484,7 @@ class AdminAttendanceSession {
     required this.presentStudentIds,
     required this.leaveStudentIds,
     required this.absentStudentIds,
+    required this.auditLogs,
   });
 
   final String id;
@@ -1331,6 +1501,7 @@ class AdminAttendanceSession {
   final List<String> presentStudentIds;
   final List<String> leaveStudentIds;
   final List<String> absentStudentIds;
+  final List<AttendanceAuditLog> auditLogs;
 
   factory AdminAttendanceSession.fromMap({
     required String id,
@@ -1355,6 +1526,14 @@ class AdminAttendanceSession {
         ((map['absentStudentIds'] as List?) ?? <dynamic>[])
             .map((dynamic id) => '$id'.trim())
             .where((String id) => id.isNotEmpty)
+            .toList();
+    final List<AttendanceAuditLog> auditLogs =
+        ((map['auditLogs'] as List?) ?? <dynamic>[])
+            .whereType<Map>()
+            .map(
+              (Map item) =>
+                  AttendanceAuditLog.fromMap(Map<String, dynamic>.from(item)),
+            )
             .toList();
     final bool teacherSubmitted =
         (map['teacherSubmitted'] as bool?) ??
@@ -1395,6 +1574,45 @@ class AdminAttendanceSession {
       presentStudentIds: presentStudentIds,
       leaveStudentIds: leaveStudentIds,
       absentStudentIds: absentStudentIds,
+      auditLogs: auditLogs,
+    );
+  }
+}
+
+class AttendanceAuditLog {
+  const AttendanceAuditLog({
+    required this.action,
+    required this.uid,
+    required this.role,
+    required this.note,
+    required this.presentCount,
+    required this.leaveCount,
+    required this.absentCount,
+    this.at,
+  });
+
+  final String action;
+  final String uid;
+  final String role;
+  final String note;
+  final int presentCount;
+  final int leaveCount;
+  final int absentCount;
+  final DateTime? at;
+
+  factory AttendanceAuditLog.fromMap(Map<String, dynamic> map) {
+    final Object? presentRaw = map['presentCount'];
+    final Object? leaveRaw = map['leaveCount'];
+    final Object? absentRaw = map['absentCount'];
+    return AttendanceAuditLog(
+      action: (map['action'] as String? ?? '').trim(),
+      uid: (map['uid'] as String? ?? '').trim(),
+      role: (map['role'] as String? ?? '').trim(),
+      note: (map['note'] as String? ?? '').trim(),
+      presentCount: presentRaw is int ? presentRaw : int.tryParse('$presentRaw') ?? 0,
+      leaveCount: leaveRaw is int ? leaveRaw : int.tryParse('$leaveRaw') ?? 0,
+      absentCount: absentRaw is int ? absentRaw : int.tryParse('$absentRaw') ?? 0,
+      at: (map['at'] as Timestamp?)?.toDate(),
     );
   }
 }
