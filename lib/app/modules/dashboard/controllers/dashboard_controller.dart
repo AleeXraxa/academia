@@ -89,6 +89,13 @@ class DashboardController extends GetxController {
         sum + _toInt(session['presentCount']),
   );
 
+  int get todayLeaveCount => _todaySessionMaps.fold<int>(
+    0,
+    (int sum, Map<String, dynamic> session) => sum + _toInt(session['leaveCount']),
+  );
+
+  int get todayAttendedCount => todayPresentCount + todayLeaveCount;
+
   int get todayTotalStudentsCount => _todaySessionMaps.fold<int>(
     0,
     (int sum, Map<String, dynamic> session) =>
@@ -99,7 +106,7 @@ class DashboardController extends GetxController {
     if (todayTotalStudentsCount <= 0) {
       return 0;
     }
-    return (todayPresentCount / todayTotalStudentsCount) * 100;
+    return (todayAttendedCount / todayTotalStudentsCount) * 100;
   }
 
   int get sessionsToday => _todaySessionMaps.length;
@@ -197,40 +204,100 @@ class DashboardController extends GetxController {
     return points;
   }
 
-  int get atRiskStudents {
-    final Map<String, int> totalByStudent = <String, int>{};
-    final Map<String, int> attendedByStudent = <String, int>{};
+  int get atRiskStudents => studentsAbsentThreeConsecutiveDays;
+
+  int get studentsAbsentThreeConsecutiveDays {
+    return absentThreeDayStreakStudents.length;
+  }
+
+  List<StudentAbsenceStreak> get absentThreeDayStreakStudents {
+    final Map<String, Map<String, bool>> byStudentByDate = <String, Map<String, bool>>{};
 
     for (final Map<String, dynamic> session in _recentSessionMaps) {
+      final DateTime? date = _sessionDate(session);
+      if (date == null) {
+        continue;
+      }
+      final String dateKey =
+          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
       final List<String> present = _toStringList(session['presentStudentIds']);
       final List<String> leave = _toStringList(session['leaveStudentIds']);
       final List<String> absent = _toStringList(session['absentStudentIds']);
 
       for (final String id in present) {
-        totalByStudent[id] = (totalByStudent[id] ?? 0) + 1;
-        attendedByStudent[id] = (attendedByStudent[id] ?? 0) + 1;
+        byStudentByDate.putIfAbsent(id, () => <String, bool>{})[dateKey] = true;
       }
       for (final String id in leave) {
-        totalByStudent[id] = (totalByStudent[id] ?? 0) + 1;
-        attendedByStudent[id] = (attendedByStudent[id] ?? 0) + 1;
+        byStudentByDate.putIfAbsent(id, () => <String, bool>{})[dateKey] = true;
       }
       for (final String id in absent) {
-        totalByStudent[id] = (totalByStudent[id] ?? 0) + 1;
+        final Map<String, bool> byDate = byStudentByDate.putIfAbsent(
+          id,
+          () => <String, bool>{},
+        );
+        byDate[dateKey] = byDate[dateKey] ?? false;
       }
     }
 
-    int count = 0;
-    totalByStudent.forEach((String id, int total) {
-      if (total <= 0) {
-        return;
+    final Map<String, StudentModel> studentsById = <String, StudentModel>{
+      for (final StudentModel student in students) student.id.trim(): student,
+    };
+    final List<StudentAbsenceStreak> results = <StudentAbsenceStreak>[];
+
+    byStudentByDate.forEach((String studentId, Map<String, bool> byDate) {
+      final List<DateTime> dates = byDate.keys
+          .map((String key) => DateTime.tryParse('$key 00:00:00'))
+          .whereType<DateTime>()
+          .toList()
+        ..sort((DateTime a, DateTime b) => a.compareTo(b));
+
+      int currentStreak = 0;
+      int maxStreak = 0;
+      DateTime? lastDate;
+
+      for (final DateTime day in dates) {
+        final String key =
+            '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+        final bool attended = byDate[key] ?? false;
+        final bool consecutive =
+            lastDate != null && day.difference(lastDate).inDays == 1;
+
+        if (!attended) {
+          currentStreak = consecutive ? currentStreak + 1 : 1;
+          if (currentStreak > maxStreak) {
+            maxStreak = currentStreak;
+          }
+        } else {
+          currentStreak = 0;
+        }
+        lastDate = day;
       }
-      final int attended = attendedByStudent[id] ?? 0;
-      final double rate = (attended / total) * 100;
-      if (rate < 70) {
-        count += 1;
+
+      if (maxStreak >= 3) {
+        final StudentModel? student = studentsById[studentId.trim()];
+        results.add(
+          StudentAbsenceStreak(
+            studentFirestoreId: studentId,
+            studentId: (student?.studentId ?? '').trim(),
+            name: (student?.name ?? 'Student $studentId').trim(),
+            batchName: (student?.batchName ?? '').trim(),
+            maxConsecutiveAbsentDays: maxStreak,
+          ),
+        );
       }
     });
-    return count;
+
+    results.sort((StudentAbsenceStreak a, StudentAbsenceStreak b) {
+      final int streakCompare = b.maxConsecutiveAbsentDays.compareTo(
+        a.maxConsecutiveAbsentDays,
+      );
+      if (streakCompare != 0) {
+        return streakCompare;
+      }
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    return results;
   }
 
   @override
@@ -404,6 +471,24 @@ class DashboardController extends GetxController {
         .toList();
   }
 
+  DateTime? _sessionDate(Map<String, dynamic> session) {
+    final Timestamp? ts = session['date'] as Timestamp?;
+    final DateTime? fromTimestamp = ts?.toDate();
+    if (fromTimestamp != null) {
+      return DateTime(
+        fromTimestamp.year,
+        fromTimestamp.month,
+        fromTimestamp.day,
+      );
+    }
+    final String dateKey = (session['dateKey'] as String? ?? '').trim();
+    final DateTime? parsed = DateTime.tryParse('$dateKey 00:00:00');
+    if (parsed == null) {
+      return null;
+    }
+    return DateTime(parsed.year, parsed.month, parsed.day);
+  }
+
   String _studentStatus(StudentModel student) {
     final String normalized = student.status.trim().toLowerCase();
     if (normalized.isEmpty) {
@@ -448,4 +533,20 @@ class WeekdayAttendancePoint {
 
   final String label;
   final double percent;
+}
+
+class StudentAbsenceStreak {
+  const StudentAbsenceStreak({
+    required this.studentFirestoreId,
+    required this.studentId,
+    required this.name,
+    required this.batchName,
+    required this.maxConsecutiveAbsentDays,
+  });
+
+  final String studentFirestoreId;
+  final String studentId;
+  final String name;
+  final String batchName;
+  final int maxConsecutiveAbsentDays;
 }

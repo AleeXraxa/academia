@@ -3412,6 +3412,7 @@ class AttendanceView extends StatelessWidget {
                   SizedBox(
                     width: 180,
                     child: DropdownButtonFormField<int>(
+                      isExpanded: true,
                       value: controller.historyRangeDays.value,
                       decoration: const InputDecoration(
                         labelText: 'Date Range',
@@ -3438,6 +3439,7 @@ class AttendanceView extends StatelessWidget {
                   SizedBox(
                     width: 220,
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: controller.historyBatchId.value.isEmpty
                           ? ''
                           : controller.historyBatchId.value,
@@ -3453,7 +3455,11 @@ class AttendanceView extends StatelessWidget {
                         ...controller.batches.map(
                           (BatchModel batch) => DropdownMenuItem<String>(
                             value: batch.id,
-                            child: Text(batch.name),
+                            child: Text(
+                              batch.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
                       ],
@@ -3464,6 +3470,7 @@ class AttendanceView extends StatelessWidget {
                   SizedBox(
                     width: 220,
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: controller.historyTeacherId.value.isEmpty
                           ? ''
                           : controller.historyTeacherId.value,
@@ -3480,7 +3487,11 @@ class AttendanceView extends StatelessWidget {
                           (HistoryTeacherOption option) =>
                               DropdownMenuItem<String>(
                                 value: option.id,
-                                child: Text(option.name),
+                                child: Text(
+                                  option.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                         ),
                       ],
@@ -3491,6 +3502,7 @@ class AttendanceView extends StatelessWidget {
                   SizedBox(
                     width: 210,
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: controller.historyStatus.value.isEmpty
                           ? ''
                           : controller.historyStatus.value,
@@ -5260,40 +5272,86 @@ class AttendanceView extends StatelessWidget {
     required int absent,
     required int expectedTarget,
   }) async {
-    final bool? confirm = await showDialog<bool>(
+    bool confirmed = false;
+    await _showSaasDialog(
       context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: const Text('Review Submission'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _dialogHeader(
+            icon: Icons.rate_review_rounded,
+            title: 'Review Submission',
+            subtitle: 'Please confirm attendance counts before final submit.',
+            accent: AppColors.accent,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFF),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE4EAF7)),
+            ),
+            child: Text(
+              batchName,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: <Widget>[
-              Text(
-                batchName,
-                style: const TextStyle(fontWeight: FontWeight.w700),
+              _sessionMiniChip(
+                'Target',
+                '$expectedTarget',
+                const Color(0xFFE8EEFF),
+                const Color(0xFF1E4ED8),
               ),
-              const SizedBox(height: 8),
-              Text('Expected Present: $expectedTarget'),
-              Text('Present: $present'),
-              Text('Leave: $leave'),
-              Text('Absent: $absent'),
+              _sessionMiniChip(
+                'Present',
+                '$present',
+                const Color(0xFFDCFCE7),
+                const Color(0xFF166534),
+              ),
+              _sessionMiniChip(
+                'Leave',
+                '$leave',
+                const Color(0xFFFFF3DC),
+                const Color(0xFF9A3412),
+              ),
+              _sessionMiniChip(
+                'Absent',
+                '$absent',
+                const Color(0xFFFEE2E2),
+                const Color(0xFF991B1B),
+              ),
             ],
           ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Back'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Submit'),
-            ),
-          ],
-        );
-      },
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: <Widget>[
+              OutlinedButton(
+                onPressed: _closeActiveDialog,
+                child: const Text('Back'),
+              ),
+              const Spacer(),
+              FilledButton.icon(
+                onPressed: () {
+                  confirmed = true;
+                  _closeActiveDialog();
+                },
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Submit'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
-    return confirm ?? false;
+    return confirmed;
   }
 
   Future<void> _showErrorDialog(BuildContext context, String message) async {
