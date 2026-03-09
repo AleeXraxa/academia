@@ -164,6 +164,280 @@ class StudentsController extends GetxController {
     await batch.commit();
   }
 
+  String get bulkImportTemplateCsv =>
+      'fullName,studentId,email,contactNo,parentContact,gender,batchId,batchName,status\n'
+      'John Doe,STD-001,john@example.com,03001234567,03007654321,Male,,Batch A,active\n'
+      'Jane Smith,STD-002,jane@example.com,,,Female,batch_document_id,,completed\n';
+
+  BulkStudentImportPreview previewBulkImport(String csvContent) {
+    final List<List<String>> rows = _parseCsv(csvContent);
+    if (rows.isEmpty) {
+      throw Exception('CSV file is empty.');
+    }
+    if (rows.length == 1) {
+      throw Exception('CSV has header only. Add at least one student row.');
+    }
+
+    final List<String> headers = rows.first
+        .map((String value) => _normalizeHeader(value))
+        .toList();
+    final List<BulkStudentImportRow> parsedRows = <BulkStudentImportRow>[];
+
+    for (int i = 1; i < rows.length; i++) {
+      final List<String> row = rows[i];
+      final Map<String, String> byHeader = <String, String>{};
+      for (int j = 0; j < headers.length; j++) {
+        final String key = headers[j];
+        byHeader[key] = j < row.length ? row[j].trim() : '';
+      }
+
+      final List<String> errors = <String>[];
+      final String fullName = _pick(byHeader, <String>[
+        'fullname',
+        'full_name',
+        'name',
+      ]).trim();
+      final String studentId = _pick(byHeader, <String>[
+        'studentid',
+        'student_id',
+      ]).trim();
+      final String email = _pick(byHeader, <String>['email']).trim();
+      final String contactNo = _pick(byHeader, <String>[
+        'contactno',
+        'contact_no',
+      ]).trim();
+      final String parentContact = _pick(byHeader, <String>[
+        'parentcontact',
+        'parent_contact',
+      ]).trim();
+      final String genderRaw = _pick(byHeader, <String>['gender']).trim();
+      final String batchIdRaw = _pick(byHeader, <String>[
+        'batchid',
+        'batch_id',
+      ]).trim();
+      final String batchNameRaw = _pick(byHeader, <String>[
+        'batchname',
+        'batch_name',
+      ]).trim();
+      final String statusRaw = _pick(byHeader, <String>['status']).trim();
+
+      if (fullName.isEmpty) {
+        errors.add('Full Name is required.');
+      }
+      if (email.isNotEmpty && !_isValidEmail(email)) {
+        errors.add('Invalid email format.');
+      }
+
+      final BatchModel? matchedBatch = _matchBatch(
+        batchId: batchIdRaw,
+        batchName: batchNameRaw,
+      );
+      if ((batchIdRaw.isEmpty && batchNameRaw.isEmpty) || matchedBatch == null) {
+        errors.add('Batch not found. Provide valid batchId or batchName.');
+      }
+
+      final String statusNormalized = statusRaw.isEmpty
+          ? 'active'
+          : statusRaw.toLowerCase();
+      const Set<String> allowedStatus = <String>{
+        'active',
+        'completed',
+        'drop',
+      };
+      if (!allowedStatus.contains(statusNormalized)) {
+        errors.add('Status must be active, completed, or drop.');
+      }
+
+      String genderNormalized = genderRaw.isEmpty ? 'Male' : genderRaw;
+      final String genderLower = genderNormalized.toLowerCase();
+      if (genderLower == 'male' || genderLower == 'm') {
+        genderNormalized = 'Male';
+      } else if (genderLower == 'female' || genderLower == 'f') {
+        genderNormalized = 'Female';
+      } else if (genderLower == 'other' || genderLower == 'o') {
+        genderNormalized = 'Other';
+      } else {
+        errors.add('Gender must be Male, Female, or Other.');
+      }
+
+      parsedRows.add(
+        BulkStudentImportRow(
+          rowNumber: i + 1,
+          fullName: fullName,
+          studentId: studentId,
+          email: email.toLowerCase(),
+          contactNo: contactNo,
+          parentContact: parentContact,
+          gender: genderNormalized,
+          status: statusNormalized,
+          batchId: matchedBatch?.id ?? '',
+          batchName: matchedBatch?.name ?? '',
+          errors: errors,
+        ),
+      );
+    }
+
+    return BulkStudentImportPreview(rows: parsedRows);
+  }
+
+  Future<BulkStudentImportResult> importBulkStudents({
+    required BulkStudentImportPreview preview,
+    bool skipInvalid = true,
+  }) async {
+    final List<BulkStudentImportRow> validRows = preview.rows
+        .where((BulkStudentImportRow row) => row.isValid)
+        .toList();
+    final List<BulkStudentImportRow> invalidRows = preview.rows
+        .where((BulkStudentImportRow row) => !row.isValid)
+        .toList();
+
+    if (!skipInvalid && invalidRows.isNotEmpty) {
+      throw Exception('Fix invalid rows or enable skip invalid rows.');
+    }
+    if (validRows.isEmpty) {
+      throw Exception('No valid rows to import.');
+    }
+
+    int imported = 0;
+    final List<String> failed = <String>[];
+    const int chunkSize = 380;
+
+    for (int start = 0; start < validRows.length; start += chunkSize) {
+      final int end = (start + chunkSize) > validRows.length
+          ? validRows.length
+          : start + chunkSize;
+      final List<BulkStudentImportRow> chunk = validRows.sublist(start, end);
+      final WriteBatch writeBatch = _firestore.batch();
+
+      for (final BulkStudentImportRow row in chunk) {
+        final DocumentReference<Map<String, dynamic>> doc =
+            _firestore.collection('students').doc();
+        writeBatch.set(doc, <String, dynamic>{
+          'name': row.fullName,
+          'studentId': row.studentId,
+          'email': row.email,
+          'contactNo': row.contactNo,
+          'parentContact': row.parentContact,
+          'gender': row.gender,
+          'status': row.status,
+          'batchId': row.batchId,
+          'batchName': row.batchName,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      try {
+        await writeBatch.commit();
+        imported += chunk.length;
+      } catch (e) {
+        failed.add('Rows ${chunk.first.rowNumber}-${chunk.last.rowNumber}: $e');
+      }
+    }
+
+    unawaited(_syncBatchStudentCountsFromFirestore());
+
+    return BulkStudentImportResult(
+      total: preview.totalRows,
+      imported: imported,
+      skipped: skipInvalid ? invalidRows.length : 0,
+      failed: failed,
+    );
+  }
+
+  Future<void> _syncBatchStudentCountsFromFirestore() async {
+    final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
+        .collection('students')
+        .get();
+    final List<StudentModel> mapped = snapshot.docs
+        .map(
+          (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
+              StudentModel.fromMap(id: doc.id, map: doc.data()),
+        )
+        .toList();
+    await _syncBatchStudentCounts(mapped);
+  }
+
+  BatchModel? _matchBatch({required String batchId, required String batchName}) {
+    final String normalizedId = batchId.trim();
+    if (normalizedId.isNotEmpty) {
+      for (final BatchModel batch in batches) {
+        if (batch.id.trim() == normalizedId) {
+          return batch;
+        }
+      }
+    }
+
+    final String normalizedName = batchName.trim().toLowerCase();
+    if (normalizedName.isNotEmpty) {
+      for (final BatchModel batch in batches) {
+        if (batch.name.trim().toLowerCase() == normalizedName) {
+          return batch;
+        }
+      }
+    }
+    return null;
+  }
+
+  String _normalizeHeader(String header) {
+    return header.trim().toLowerCase().replaceAll(' ', '').replaceAll('-', '_');
+  }
+
+  String _pick(Map<String, String> byHeader, List<String> keys) {
+    for (final String key in keys) {
+      if (byHeader.containsKey(key)) {
+        return byHeader[key] ?? '';
+      }
+    }
+    return '';
+  }
+
+  bool _isValidEmail(String value) {
+    final RegExp regex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    return regex.hasMatch(value);
+  }
+
+  List<List<String>> _parseCsv(String input) {
+    final List<List<String>> rows = <List<String>>[];
+    final StringBuffer field = StringBuffer();
+    List<String> row = <String>[];
+    bool inQuotes = false;
+
+    for (int i = 0; i < input.length; i++) {
+      final String char = input[i];
+      if (char == '"') {
+        if (inQuotes && i + 1 < input.length && input[i + 1] == '"') {
+          field.write('"');
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char == ',' && !inQuotes) {
+        row.add(field.toString().trim());
+        field.clear();
+      } else if ((char == '\n' || char == '\r') && !inQuotes) {
+        if (char == '\r' && i + 1 < input.length && input[i + 1] == '\n') {
+          i++;
+        }
+        row.add(field.toString().trim());
+        field.clear();
+        final bool isRowEmpty = row.every((String value) => value.isEmpty);
+        if (!isRowEmpty) {
+          rows.add(row);
+        }
+        row = <String>[];
+      } else {
+        field.write(char);
+      }
+    }
+
+    row.add(field.toString().trim());
+    final bool isLastRowEmpty = row.every((String value) => value.isEmpty);
+    if (!isLastRowEmpty) {
+      rows.add(row);
+    }
+    return rows;
+  }
+
   Future<void> updateStudent({
     required String id,
     required String name,
@@ -257,4 +531,60 @@ class StudentsController extends GetxController {
     _batchesSubscription?.cancel();
     super.onClose();
   }
+}
+
+class BulkStudentImportRow {
+  const BulkStudentImportRow({
+    required this.rowNumber,
+    required this.fullName,
+    required this.studentId,
+    required this.email,
+    required this.contactNo,
+    required this.parentContact,
+    required this.gender,
+    required this.status,
+    required this.batchId,
+    required this.batchName,
+    required this.errors,
+  });
+
+  final int rowNumber;
+  final String fullName;
+  final String studentId;
+  final String email;
+  final String contactNo;
+  final String parentContact;
+  final String gender;
+  final String status;
+  final String batchId;
+  final String batchName;
+  final List<String> errors;
+
+  bool get isValid => errors.isEmpty;
+}
+
+class BulkStudentImportPreview {
+  const BulkStudentImportPreview({required this.rows});
+
+  final List<BulkStudentImportRow> rows;
+
+  int get totalRows => rows.length;
+  int get validRows =>
+      rows.where((BulkStudentImportRow row) => row.isValid).length;
+  int get invalidRows =>
+      rows.where((BulkStudentImportRow row) => !row.isValid).length;
+}
+
+class BulkStudentImportResult {
+  const BulkStudentImportResult({
+    required this.total,
+    required this.imported,
+    required this.skipped,
+    required this.failed,
+  });
+
+  final int total;
+  final int imported;
+  final int skipped;
+  final List<String> failed;
 }
