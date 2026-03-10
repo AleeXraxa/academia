@@ -38,6 +38,7 @@ extension _AttendanceViewDialogsPart on AttendanceView {
     final TextEditingController searchController = TextEditingController(
       text: draft.search,
     );
+    String reasonText = session.notConductedTeacherReason;
     String statusFilter =
         <String>['all', 'present', 'leave', 'unmarked'].contains(draft.filter)
         ? draft.filter
@@ -48,6 +49,7 @@ extension _AttendanceViewDialogsPart on AttendanceView {
         : 'Live sync';
     DateTime lastSyncAt = DateTime.now();
     String warningText = '';
+    String? reasonError;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -135,6 +137,60 @@ extension _AttendanceViewDialogsPart on AttendanceView {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
+                            if (!session.classConducted) ...<Widget>[
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFF7ED),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: const Color(0xFFFED7AA),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: <Widget>[
+                                    const Icon(
+                                      Icons.info_outline_rounded,
+                                      color: Color(0xFF9A3412),
+                                      size: 18,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Admin marked this session as not conducted. Reason is required before submission.',
+                                        style: const TextStyle(
+                                          color: Color(0xFF9A3412),
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              TextFormField(
+                                initialValue: reasonText,
+                                maxLines: 2,
+                                onChanged: (String value) {
+                                  setState(() {
+                                    reasonText = value;
+                                    reasonError = null;
+                                  });
+                                },
+                                decoration: InputDecoration(
+                                  labelText:
+                                      'Reason for class not conducted',
+                                  hintText:
+                                      'Example: Trainer unavailable, but students were present.',
+                                  errorText: reasonError,
+                                  prefixIcon: const Icon(
+                                    Icons.edit_note_rounded,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                            ],
                             Wrap(
                               spacing: 8,
                               runSpacing: 8,
@@ -500,6 +556,14 @@ extension _AttendanceViewDialogsPart on AttendanceView {
                                 onPressed: isSubmitting
                                     ? null
                                     : () async {
+                                        if (!session.classConducted &&
+                                            reasonText.trim().isEmpty) {
+                                          setState(() {
+                                            reasonError =
+                                                'Please provide a reason.';
+                                          });
+                                          return;
+                                        }
                                         if (presentIds.length >
                                             expectedTarget) {
                                           setState(() {
@@ -545,6 +609,8 @@ extension _AttendanceViewDialogsPart on AttendanceView {
                                                 leaveStudentIds: leaveIds
                                                     .toList(),
                                                 absentStudentIds: absentIds,
+                                                notConductedReason:
+                                                    reasonText,
                                               );
                                           controller.clearTeacherDraft(
                                             session.id,
@@ -600,6 +666,8 @@ extension _AttendanceViewDialogsPart on AttendanceView {
                                             leaveStudentIds: leaveIds.toList(),
                                             absentStudentIds: absentIds,
                                             reason: '$e',
+                                            notConductedReason:
+                                                reasonText,
                                           );
                                           controller.cacheTeacherDraft(
                                             sessionId: session.id,
@@ -741,6 +809,15 @@ extension _AttendanceViewDialogsPart on AttendanceView {
                 const Color(0xFFE8EEFF),
                 const Color(0xFF1E4ED8),
               ),
+              if (!session.classConducted)
+                _sessionMiniChip(
+                  'Not Conducted',
+                  session.notConductedTeacherReason.isNotEmpty
+                      ? session.notConductedTeacherReason
+                      : 'Reason required',
+                  const Color(0xFFFFF3DC),
+                  const Color(0xFF9A3412),
+                ),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),

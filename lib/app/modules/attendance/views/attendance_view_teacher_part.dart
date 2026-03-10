@@ -401,6 +401,15 @@ extension _AttendanceViewTeacherPart on AttendanceView {
                                     const Color(0xFFF3F4F6),
                                     const Color(0xFF334155),
                                   ),
+                                  if (!item.classConducted)
+                                    _sessionMiniChip(
+                                      'Not Conducted',
+                                      item.notConductedTeacherReason.isNotEmpty
+                                          ? item.notConductedTeacherReason
+                                          : 'Reason required',
+                                      const Color(0xFFFFF3DC),
+                                      const Color(0xFF9A3412),
+                                    ),
                                 ],
                               ),
                               const SizedBox(height: 10),
@@ -1087,6 +1096,15 @@ extension _AttendanceViewTeacherPart on AttendanceView {
                                         ? const Color(0xFF9A3412)
                                         : const Color(0xFF166534),
                                   ),
+                                  if (!item.classConducted)
+                                    _sessionMiniChip(
+                                      'Not Conducted',
+                                      item.notConductedTeacherReason.isNotEmpty
+                                          ? item.notConductedTeacherReason
+                                          : 'Reason required',
+                                      const Color(0xFFFFF3DC),
+                                      const Color(0xFF9A3412),
+                                    ),
                                 ],
                               ),
                               const SizedBox(height: 8),

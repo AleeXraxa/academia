@@ -381,6 +381,56 @@ extension _AttendanceViewAdminPart on AttendanceView {
                                   ],
                                 ),
                                 const SizedBox(height: 8),
+                                Obx(() {
+                                  final bool isConducted =
+                                      controller
+                                          .generationConductedByBatchId[batch
+                                          .id] ??
+                                      true;
+                                  return Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: <Widget>[
+                                      Row(
+                                        children: <Widget>[
+                                          Expanded(
+                                            child: Text(
+                                              'Class Conducted',
+                                              style: TextStyle(
+                                                color: isSelected
+                                                    ? AppColors.textPrimary
+                                                    : AppColors.textSecondary,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                          Switch.adaptive(
+                                            value: isConducted,
+                                            onChanged: isSelected
+                                                ? (bool value) {
+                                                    controller
+                                                        .updateBatchConducted(
+                                                          batchId: batch.id,
+                                                          conducted: value,
+                                                        );
+                                                  }
+                                                : null,
+                                          ),
+                                        ],
+                                      ),
+                                      if (!isConducted) ...<Widget>[
+                                        const SizedBox(height: 6),
+                                        _sessionMiniChip(
+                                          'Not Conducted',
+                                          'Reason required by teacher',
+                                          const Color(0xFFFFF3DC),
+                                          const Color(0xFF9A3412),
+                                        ),
+                                      ],
+                                    ],
+                                  );
+                                }),
+                                const SizedBox(height: 8),
                                 TextField(
                                   enabled: isSelected,
                                   keyboardType: TextInputType.number,
@@ -444,6 +494,44 @@ extension _AttendanceViewAdminPart on AttendanceView {
                                       ),
                                     ],
                                   ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Obx(() {
+                                    final bool isConducted =
+                                        controller
+                                            .generationConductedByBatchId[batch
+                                            .id] ??
+                                        true;
+                                    return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: <Widget>[
+                                        Text(
+                                          'Class Conducted',
+                                          style: TextStyle(
+                                            color: isSelected
+                                                ? AppColors.textPrimary
+                                                : AppColors.textSecondary,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        Switch.adaptive(
+                                          value: isConducted,
+                                          onChanged: isSelected
+                                              ? (bool value) {
+                                                  controller
+                                                      .updateBatchConducted(
+                                                        batchId: batch.id,
+                                                        conducted: value,
+                                                      );
+                                                }
+                                              : null,
+                                        ),
+                                      ],
+                                    );
+                                  }),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
@@ -682,6 +770,15 @@ extension _AttendanceViewAdminPart on AttendanceView {
                                 const Color(0xFFE8EEFF),
                                 const Color(0xFF1E4ED8),
                               ),
+                              if (!item.classConducted)
+                                _sessionMiniChip(
+                                  'Not Conducted',
+                                  item.notConductedTeacherReason.isNotEmpty
+                                      ? item.notConductedTeacherReason
+                                      : 'Reason required',
+                                  const Color(0xFFFFF3DC),
+                                  const Color(0xFF9A3412),
+                                ),
                               if (controller.hasTeacherDraft(item.id))
                                 _sessionMiniChip(
                                   'Draft',
@@ -846,6 +943,15 @@ extension _AttendanceViewAdminPart on AttendanceView {
                                   const Color(0xFFE8EEFF),
                                   const Color(0xFF1E4ED8),
                                 ),
+                                if (!item.classConducted)
+                                  _sessionMiniChip(
+                                    'Not Conducted',
+                                    item.notConductedTeacherReason.isNotEmpty
+                                        ? item.notConductedTeacherReason
+                                        : 'Reason required',
+                                    const Color(0xFFFFF3DC),
+                                    const Color(0xFF9A3412),
+                                  ),
                               ],
                             ),
                             if (isTeacher &&
@@ -1014,6 +1120,29 @@ extension _AttendanceViewAdminPart on AttendanceView {
                                         ),
                                         label: const Text('Details'),
                                       ),
+                                    )
+                                  : (!item.classConducted)
+                                  ? Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: <Widget>[
+                                        _statusPill(item.status),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          item
+                                                  .notConductedTeacherReason
+                                                  .isNotEmpty
+                                              ? item.notConductedTeacherReason
+                                              : 'Not Conducted',
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: Color(0xFF9A3412),
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
                                     )
                                   : _statusPill(item.status),
                             ),
@@ -1435,6 +1564,15 @@ extension _AttendanceViewAdminPart on AttendanceView {
                               const Color(0xFFFEE2E2),
                               const Color(0xFF991B1B),
                             ),
+                            if (!item.classConducted)
+                              _sessionMiniChip(
+                                'Not Conducted',
+                                item.notConductedTeacherReason.isNotEmpty
+                                    ? item.notConductedTeacherReason
+                                    : 'Reason required',
+                                const Color(0xFFFFF3DC),
+                                const Color(0xFF9A3412),
+                              ),
                           ],
                         ),
                         const SizedBox(height: 10),
@@ -1601,7 +1739,7 @@ extension _AttendanceViewAdminPart on AttendanceView {
                                 child: Wrap(
                                   spacing: 6,
                                   runSpacing: 6,
-                          children: <Widget>[
+                                  children: <Widget>[
                                     _historyActionIcon(
                                       icon: Icons.visibility_rounded,
                                       color: AppColors.accent,
@@ -1772,9 +1910,8 @@ extension _AttendanceViewAdminPart on AttendanceView {
       );
       return;
     }
-    final Map<String, String> namesById = await controller.fetchStudentNamesByIds(
-      ids,
-    );
+    final Map<String, String> namesById = await controller
+        .fetchStudentNamesByIds(ids);
     await _showSaasDialog(
       context: context,
       child: Column(
