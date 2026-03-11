@@ -7,6 +7,7 @@ import 'package:academia/app/modules/batches/controllers/batches_controller.dart
 import 'package:academia/app/routes/app_routes.dart';
 import 'package:academia/app/theme/app_colors.dart';
 import 'package:academia/app/theme/app_spacing.dart';
+import 'package:academia/app/widgets/common/app_notifier.dart';
 import 'package:academia/app/widgets/common/app_page_scaffold.dart';
 import 'package:academia/app/widgets/layout/app_shell.dart';
 import 'package:flutter/material.dart';
@@ -1580,25 +1581,29 @@ class BatchesView extends StatelessWidget {
     try {
       await action();
     } catch (e) {
-      if (context.mounted) {
-        await _showOperationDialog(
-          context: context,
-          success: false,
-          title: '$operationLabel Failed',
-          subtitle: 'Please review and try again.',
-          detail: '$e',
+      if (AppNotifier.isNetworkError(e)) {
+        AppNotifier.showRetry(
+          title: 'Network error',
+          message: 'Unable to sync. Check connection and retry.',
+          onRetry: () => _runGuardedAction(
+            context: context,
+            operationLabel: operationLabel,
+            action: action,
+          ),
         );
+        return;
       }
+      AppNotifier.showError(
+        '$operationLabel Failed',
+        message: AppNotifier.cleanMessage(e),
+      );
     }
   }
 
   Future<void> _showErrorDialog(BuildContext context, String message) async {
-    await _showOperationDialog(
-      context: context,
-      success: false,
-      title: 'Operation Failed',
-      subtitle: 'Please review and try again.',
-      detail: message,
+    AppNotifier.showError(
+      'Operation Failed',
+      message: message.replaceFirst('Exception: ', ''),
     );
   }
 

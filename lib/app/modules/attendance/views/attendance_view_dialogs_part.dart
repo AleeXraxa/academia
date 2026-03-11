@@ -35,9 +35,7 @@ extension _AttendanceViewDialogsPart on AttendanceView {
     final Set<String> leaveIds = draft.leaveStudentIds
         .where((String id) => allowedIds.contains(id))
         .toSet();
-    final TextEditingController searchController = TextEditingController(
-      text: draft.search,
-    );
+    String searchText = draft.search;
     String reasonText = session.notConductedTeacherReason;
     String statusFilter =
         <String>['all', 'present', 'leave', 'unmarked'].contains(draft.filter)
@@ -66,9 +64,7 @@ extension _AttendanceViewDialogsPart on AttendanceView {
             ),
             child: StatefulBuilder(
               builder: (BuildContext context, void Function(void Function()) setState) {
-                final String searchQuery = searchController.text
-                    .trim()
-                    .toLowerCase();
+                final String searchQuery = searchText.trim().toLowerCase();
                 final List<StudentModel> visibleStudents = students.where((
                   StudentModel student,
                 ) {
@@ -232,9 +228,13 @@ extension _AttendanceViewDialogsPart on AttendanceView {
                               backgroundColor: const Color(0xFFE5EAF5),
                             ),
                             const SizedBox(height: 8),
-                            TextField(
-                              controller: searchController,
-                              onChanged: (_) => setState(() {}),
+                            TextFormField(
+                              initialValue: searchText,
+                              onChanged: (String value) {
+                                setState(() {
+                                  searchText = value;
+                                });
+                              },
                               decoration: const InputDecoration(
                                 labelText: 'Search student',
                                 hintText: 'Name, ID, contact',
@@ -510,7 +510,7 @@ extension _AttendanceViewDialogsPart on AttendanceView {
                                           presentStudentIds: presentIds
                                               .toList(),
                                           leaveStudentIds: leaveIds.toList(),
-                                          search: searchController.text,
+                                          search: searchText,
                                           filter: statusFilter,
                                         );
                                         setState(() {
@@ -674,7 +674,7 @@ extension _AttendanceViewDialogsPart on AttendanceView {
                                             presentStudentIds: presentIds
                                                 .toList(),
                                             leaveStudentIds: leaveIds.toList(),
-                                            search: searchController.text,
+                                            search: searchText,
                                             filter: statusFilter,
                                           );
                                           setState(() {
@@ -741,7 +741,6 @@ extension _AttendanceViewDialogsPart on AttendanceView {
         );
       },
     );
-    searchController.dispose();
   }
 
   Future<void> _openViewAttendanceDialog(
@@ -1361,43 +1360,9 @@ extension _AttendanceViewDialogsPart on AttendanceView {
   }
 
   Future<void> _showErrorDialog(BuildContext context, String message) async {
-    await _showSaasDialog(
-      context: context,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          _dialogHeader(
-            icon: Icons.error_outline_rounded,
-            title: 'Unable to Save',
-            subtitle: 'Please review the input and try again.',
-            accent: AppColors.error,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF5F5),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFF5D0D0)),
-            ),
-            child: Text(
-              message.replaceFirst('Exception: ', ''),
-              style: const TextStyle(color: AppColors.textPrimary, height: 1.4),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton(
-              onPressed: _closeActiveDialog,
-              style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-              child: const Text('OK'),
-            ),
-          ),
-        ],
-      ),
+    AppNotifier.showError(
+      'Something went wrong',
+      message: message.replaceFirst('Exception: ', ''),
     );
   }
 
@@ -1463,7 +1428,21 @@ extension _AttendanceViewDialogsPart on AttendanceView {
     try {
       await action();
     } catch (e) {
-      await _showErrorDialog(context, '$e');
+      if (AppNotifier.isNetworkError(e)) {
+        AppNotifier.showRetry(
+          title: 'Network error',
+          message: 'Unable to sync. Check connection and retry.',
+          onRetry: () => _runGuardedDialogAction(
+            context: context,
+            action: action,
+          ),
+        );
+        return;
+      }
+      AppNotifier.showError(
+        'Something went wrong',
+        message: AppNotifier.cleanMessage(e),
+      );
     }
   }
 

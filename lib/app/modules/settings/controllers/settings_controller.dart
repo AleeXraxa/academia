@@ -8,7 +8,7 @@ class SettingsController extends GetxController {
   final RxBool isSaving = false.obs;
   final RxString errorText = ''.obs;
 
-  final RxString instituteName = 'Academia'.obs;
+  final RxString instituteName = 'AttendX'.obs;
   final RxString supportEmail = ''.obs;
   final RxInt defaultHistoryDays = 30.obs;
   final RxBool lockSubmittedSessions = true.obs;
@@ -39,7 +39,7 @@ class SettingsController extends GetxController {
       instituteName.value =
           (map['instituteName'] as String?)?.trim().isNotEmpty == true
           ? (map['instituteName'] as String).trim()
-          : 'Academia';
+          : 'AttendX';
       supportEmail.value = (map['supportEmail'] as String?)?.trim() ?? '';
       defaultHistoryDays.value = _toInt(map['defaultHistoryDays'], fallback: 30);
       lockSubmittedSessions.value =

@@ -2,6 +2,7 @@ import 'package:academia/app/core/enums/user_role.dart';
 import 'package:academia/app/core/guards/role_guard.dart';
 import 'package:academia/app/core/session/app_session.dart';
 import 'package:academia/app/modules/attendance/views/attendance_view.dart';
+import 'package:academia/app/modules/audit_logs/views/audit_logs_view.dart';
 import 'package:academia/app/modules/auth/views/login_view.dart';
 import 'package:academia/app/modules/auth/views/register_view.dart';
 import 'package:academia/app/modules/batches/views/batches_view.dart';
@@ -104,6 +105,13 @@ class AppPages {
       name: AppRoutes.reports,
       page: () => _guardedPage(
         view: const ReportsView(),
+        allowedRoles: <UserRole>[UserRole.cah],
+      ),
+    ),
+    GetPage<dynamic>(
+      name: AppRoutes.auditLogs,
+      page: () => _guardedPage(
+        view: const AuditLogsView(),
         allowedRoles: <UserRole>[UserRole.cah],
       ),
     ),

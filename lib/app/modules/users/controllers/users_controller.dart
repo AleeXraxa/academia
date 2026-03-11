@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:academia/app/core/enums/user_role.dart';
 import 'package:academia/app/core/session/app_session.dart';
 import 'package:academia/app/data/models/user_model.dart';
+import 'package:academia/app/services/audit_log_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -11,6 +12,7 @@ import 'package:get/get.dart';
 class UsersController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AppSession _session = Get.find<AppSession>();
+  final AuditLogService _auditLogService = AuditLogService();
   FirebaseAuth? _secondaryAuth;
 
   final RxList<UserModel> users = <UserModel>[].obs;
@@ -115,6 +117,17 @@ class UsersController extends GetxController {
     }
 
     await batch.commit();
+    await _auditLogService.log(
+      action: 'create',
+      entityType: 'user',
+      entityId: createdUser.uid,
+      entityName: name.trim(),
+      meta: <String, dynamic>{
+        'role': normalizedRole,
+        'email': normalizedEmail,
+        'status': 'approved',
+      },
+    );
   }
 
   Future<void> updateUser({
@@ -141,8 +154,11 @@ class UsersController extends GetxController {
 
     final DocumentSnapshot<Map<String, dynamic>> currentSnapshot =
         await userDoc.get();
-    final String previousRole =
-        (currentSnapshot.data()?['role'] as String? ?? '').trim();
+    final Map<String, dynamic> currentData =
+        currentSnapshot.data() ?? <String, dynamic>{};
+    final String previousRole = (currentData['role'] as String? ?? '').trim();
+    final String previousStatus =
+        (currentData['status'] as String? ?? '').trim().toLowerCase();
     _ensureStatusManagementAllowed(
       targetRole: previousRole,
       requestedStoredStatus: storedStatus,
@@ -198,6 +214,30 @@ class UsersController extends GetxController {
     }
 
     await batch.commit();
+    await _auditLogService.log(
+      action: 'update',
+      entityType: 'user',
+      entityId: normalizedId,
+      entityName: name.trim(),
+      meta: <String, dynamic>{
+        'role': normalizedRole,
+        'status': storedStatus,
+        'email': email.trim().toLowerCase(),
+      },
+    );
+    if (previousStatus != storedStatus) {
+      final String statusAction = storedStatus == 'blocked' ? 'block' : 'unblock';
+      await _auditLogService.log(
+        action: statusAction,
+        entityType: 'user',
+        entityId: normalizedId,
+        entityName: name.trim(),
+        note: statusAction == 'block'
+            ? 'User status set to Blocked.'
+            : 'User status set to Active.',
+        meta: <String, dynamic>{'status': storedStatus},
+      );
+    }
   }
 
   Future<void> approveUser(String id) async {
@@ -207,6 +247,10 @@ class UsersController extends GetxController {
     final DocumentReference<Map<String, dynamic>> teacherDoc = _firestore
         .collection('teachers')
         .doc(id);
+    final DocumentSnapshot<Map<String, dynamic>> userSnapshot =
+        await userDoc.get();
+    final Map<String, dynamic> userData =
+        userSnapshot.data() ?? <String, dynamic>{};
 
     await userDoc.update(<String, dynamic>{
       'status': 'approved',
@@ -221,6 +265,16 @@ class UsersController extends GetxController {
         'approvedAt': FieldValue.serverTimestamp(),
       });
     }
+    await _auditLogService.log(
+      action: 'approve',
+      entityType: 'user',
+      entityId: id.trim(),
+      entityName: (userData['name'] as String? ?? '').trim(),
+      meta: <String, dynamic>{
+        'email': (userData['email'] as String? ?? '').trim(),
+        'role': (userData['role'] as String? ?? '').trim(),
+      },
+    );
   }
 
   Future<void> rejectUser(String id) async {
@@ -230,6 +284,10 @@ class UsersController extends GetxController {
     final DocumentReference<Map<String, dynamic>> teacherDoc = _firestore
         .collection('teachers')
         .doc(id);
+    final DocumentSnapshot<Map<String, dynamic>> userSnapshot =
+        await userDoc.get();
+    final Map<String, dynamic> userData =
+        userSnapshot.data() ?? <String, dynamic>{};
 
     await userDoc.update(<String, dynamic>{
       'status': 'rejected',
@@ -244,6 +302,16 @@ class UsersController extends GetxController {
         'rejectedAt': FieldValue.serverTimestamp(),
       });
     }
+    await _auditLogService.log(
+      action: 'reject',
+      entityType: 'user',
+      entityId: id.trim(),
+      entityName: (userData['name'] as String? ?? '').trim(),
+      meta: <String, dynamic>{
+        'email': (userData['email'] as String? ?? '').trim(),
+        'role': (userData['role'] as String? ?? '').trim(),
+      },
+    );
   }
 
   Future<void> deleteUser({
@@ -267,15 +335,17 @@ class UsersController extends GetxController {
         .doc(normalizedId);
     final DocumentSnapshot<Map<String, dynamic>> userSnapshot = await userDoc
         .get();
+    final Map<String, dynamic> userData =
+        userSnapshot.data() ?? <String, dynamic>{};
     final String targetRole =
-        (userSnapshot.data()?['role'] as String? ?? '').trim().toUpperCase();
+        (userData['role'] as String? ?? '').trim().toUpperCase();
     if (_session.roleOrStaff == UserRole.administrator &&
         targetRole != 'TEACHER') {
       throw Exception(
         'Administrator can delete Teacher accounts only.',
       );
     }
-    final String email = (userSnapshot.data()?['email'] as String? ?? '')
+    final String email = (userData['email'] as String? ?? '')
         .trim()
         .toLowerCase();
     if (email.isEmpty) {
@@ -309,6 +379,16 @@ class UsersController extends GetxController {
     batch.delete(userDoc);
     batch.delete(teacherDoc);
     await batch.commit();
+    await _auditLogService.log(
+      action: 'delete',
+      entityType: 'user',
+      entityId: normalizedId,
+      entityName: (userData['name'] as String? ?? '').trim(),
+      meta: <String, dynamic>{
+        'email': email,
+        'role': targetRole.toLowerCase(),
+      },
+    );
   }
 
   bool _isTeacherRole(String role) {

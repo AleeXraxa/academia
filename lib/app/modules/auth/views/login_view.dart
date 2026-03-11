@@ -78,6 +78,17 @@ class _MobileLoginPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           const SizedBox(height: AppSpacing.lg),
+          Center(
+            child: Text(
+              'AttendX',
+              style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.4,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
           Container(
             width: 54,
             height: 54,
@@ -127,19 +138,13 @@ class _MobileLoginPanel extends StatelessWidget {
                   keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(
                     labelText: 'Email Address',
-                    hintText: 'teacher@academia.com',
+                    hintText: 'teacher@attendx.com',
                     prefixIcon: Icon(Icons.mail_outline_rounded),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                TextField(
+                _MobilePasswordField(
                   controller: controller.passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Password',
-                    hintText: 'Enter your password',
-                    prefixIcon: Icon(Icons.lock_outline_rounded),
-                  ),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 SizedBox(
@@ -223,6 +228,47 @@ class _LoginBackground extends StatelessWidget {
   }
 }
 
+class _MobilePasswordField extends StatefulWidget {
+  const _MobilePasswordField({
+    required this.controller,
+  });
+
+  final TextEditingController controller;
+
+  @override
+  State<_MobilePasswordField> createState() => _MobilePasswordFieldState();
+}
+
+class _MobilePasswordFieldState extends State<_MobilePasswordField> {
+  bool _showPassword = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: widget.controller,
+      obscureText: !_showPassword,
+      decoration: InputDecoration(
+        labelText: 'Password',
+        hintText: 'Enter your password',
+        prefixIcon: const Icon(Icons.lock_outline_rounded),
+        suffixIcon: IconButton(
+          tooltip: _showPassword ? 'Hide password' : 'Show password',
+          onPressed: () {
+            setState(() {
+              _showPassword = !_showPassword;
+            });
+          },
+          icon: Icon(
+            _showPassword
+                ? Icons.visibility_off_rounded
+                : Icons.visibility_rounded,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _BrandPanel extends StatelessWidget {
   const _BrandPanel();
 
@@ -259,7 +305,7 @@ class _BrandPanel extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.lg),
           Text(
-            'Academia',
+            'AttendX',
             style: Theme.of(context).textTheme.headlineLarge?.copyWith(
               color: Colors.white,
               letterSpacing: 0.4,
@@ -292,9 +338,22 @@ class _BrandPanel extends StatelessWidget {
             description:
                 'Daily, monthly, and batch-level performance summaries.',
           ),
+          const SizedBox(height: AppSpacing.md),
+          const _FeatureTile(
+            icon: Icons.verified_user_rounded,
+            title: 'Audit & Compliance',
+            description: 'Track corrections and maintain clear audit trails.',
+          ),
+          const SizedBox(height: AppSpacing.md),
+          const _FeatureTile(
+            icon: Icons.shield_rounded,
+            title: 'Attendance Integrity',
+            description:
+                'Keep attendance data reliable with smart validation rules.',
+          ),
           const Spacer(),
           Text(
-            'Desktop Phase 1',
+            'Secure access for authorized staff.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Colors.white.withValues(alpha: 0.72),
             ),
@@ -366,6 +425,7 @@ class _LoginPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ValueNotifier<bool> showPassword = ValueNotifier<bool>(false);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 36),
       child: Center(
@@ -375,6 +435,14 @@ class _LoginPanel extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
+              Text(
+                'Welcome Back',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
               Text(
                 'Sign In',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
@@ -394,27 +462,37 @@ class _LoginPanel extends StatelessWidget {
                 keyboardType: TextInputType.emailAddress,
                 decoration: const InputDecoration(
                   labelText: 'Email Address',
-                  hintText: 'cah@academia.com',
+                  hintText: 'cah@attendx.com',
                   prefixIcon: Icon(Icons.mail_outline_rounded),
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              TextField(
-                controller: controller.passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  hintText: 'Enter your password',
-                  prefixIcon: Icon(Icons.lock_outline_rounded),
-                ),
+              ValueListenableBuilder<bool>(
+                valueListenable: showPassword,
+                builder: (BuildContext context, bool visible, _) {
+                  return TextField(
+                    controller: controller.passwordController,
+                    obscureText: !visible,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      hintText: 'Enter your password',
+                      prefixIcon: const Icon(Icons.lock_outline_rounded),
+                      suffixIcon: IconButton(
+                        tooltip: visible ? 'Hide password' : 'Show password',
+                        onPressed: () => showPassword.value = !visible,
+                        icon: Icon(
+                          visible
+                              ? Icons.visibility_off_rounded
+                              : Icons.visibility_rounded,
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: AppSpacing.sm),
               Row(
                 children: <Widget>[
-                  TextButton(
-                    onPressed: () => Get.toNamed(AppRoutes.register),
-                    child: const Text('Create new account'),
-                  ),
                   const Spacer(),
                   Text(
                     'Secure login',
@@ -424,6 +502,7 @@ class _LoginPanel extends StatelessWidget {
                   ),
                 ],
               ),
+              const SizedBox(height: AppSpacing.sm),
               SizedBox(
                 width: double.infinity,
                 child: Obx(() {

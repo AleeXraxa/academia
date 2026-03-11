@@ -25,6 +25,37 @@ class DashboardView extends StatelessWidget {
         subtitle:
             'Premium control center with live academic operations and status insights.',
         actions: <Widget>[
+          Obx(() {
+            return FilledButton.tonalIcon(
+              onPressed: controller.isRefreshing.value
+                  ? null
+                  : () async {
+                      await controller.refreshDashboard();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('Dashboard refreshed'),
+                            behavior: SnackBarBehavior.floating,
+                            duration: const Duration(milliseconds: 1400),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        );
+                      }
+                    },
+              icon: controller.isRefreshing.value
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh_rounded),
+              label: Text(
+                controller.isRefreshing.value ? 'Refreshing' : 'Refresh',
+              ),
+            );
+          }),
           if (canViewReports)
             OutlinedButton.icon(
               onPressed: () => Get.toNamed(AppRoutes.reports),
@@ -349,7 +380,7 @@ class DashboardView extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           const Text(
-            'Academia is running smoothly with centralized role, batch, and learner monitoring.',
+            'AttendX is running smoothly with centralized role, batch, and learner monitoring.',
             style: TextStyle(
               color: Color(0xFFE4ECFF),
               fontSize: 13,

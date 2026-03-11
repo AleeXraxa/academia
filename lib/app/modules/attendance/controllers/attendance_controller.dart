@@ -4,6 +4,7 @@ import 'package:academia/app/core/session/app_session.dart';
 import 'package:academia/app/data/models/batch_model.dart';
 import 'package:academia/app/data/models/student_model.dart';
 import 'package:academia/app/data/repositories/attendance_repository.dart';
+import 'package:academia/app/services/audit_log_service.dart';
 import 'package:academia/app/services/attendance_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -13,6 +14,7 @@ class AttendanceController extends GetxController {
   final AttendanceService _attendanceService = AttendanceService(
     repository: AttendanceRepository(),
   );
+  final AuditLogService _auditLogService = AuditLogService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   final RxList<BatchModel> batches = <BatchModel>[].obs;
@@ -760,6 +762,20 @@ class AttendanceController extends GetxController {
         merge: true,
       );
 
+      await _auditLogService.log(
+        action: 'generate',
+        entityType: 'session',
+        entityId: docId,
+        entityName: batchName,
+        meta: <String, dynamic>{
+          'dateKey': todayKey,
+          'presentCount': presentCount,
+          'absentCount': absentCount,
+          'totalStudents': totalStudents,
+          'classConducted': true,
+        },
+      );
+
       closeMarkForm();
       errorText.value = '';
     } finally {
@@ -879,6 +895,38 @@ class AttendanceController extends GetxController {
       }
 
       await _attendanceService.batchSetSessions(sessionsPayload);
+      for (final String batchId in selectedIds) {
+        final BatchModel batch = byId[batchId]!;
+        final String docId = _sessionDocIdForBatch(
+          dateKey: todayKey,
+          batchId: batchId,
+          batchName: batch.name,
+        );
+        final int totalStudents = batch.studentsCount ?? 0;
+        final int presentCount = int.parse(
+          (generationPresentByBatchId[batchId] ?? '0').trim(),
+        );
+        final int absentCount = (totalStudents - presentCount).clamp(
+          0,
+          1000000,
+        );
+        final bool classConducted =
+            generationConductedByBatchId[batchId] ?? true;
+        await _auditLogService.log(
+          action: 'generate',
+          entityType: 'session',
+          entityId: docId,
+          entityName: batch.name,
+          meta: <String, dynamic>{
+            'dateKey': todayKey,
+            'mode': generationMode.value,
+            'presentCount': presentCount,
+            'absentCount': absentCount,
+            'totalStudents': totalStudents,
+            'classConducted': classConducted,
+          },
+        );
+      }
       closeMarkForm();
       errorText.value = '';
     } finally {
@@ -909,7 +957,14 @@ class AttendanceController extends GetxController {
   }
 
   Future<List<StudentModel>> fetchStudentsForBatch(String batchId) async {
-    return _attendanceService.fetchStudentsForBatch(batchId);
+    final List<StudentModel> all =
+        await _attendanceService.fetchStudentsForBatch(batchId);
+    return all
+        .where(
+          (StudentModel student) =>
+              student.status.trim().toLowerCase() == 'active',
+        )
+        .toList();
   }
 
   Future<Map<String, String>> fetchStudentNamesByIds(
@@ -1049,6 +1104,21 @@ class AttendanceController extends GetxController {
         'updatedAt': FieldValue.serverTimestamp(),
       },
     );
+
+    await _auditLogService.log(
+      action: 'submit',
+      entityType: 'attendance',
+      entityId: sessionId,
+      entityName: (sessionMap['batchName'] as String? ?? '').trim(),
+      note: classConducted ? '' : trimmedReason,
+      meta: <String, dynamic>{
+        'dateKey': (sessionMap['dateKey'] as String? ?? '').trim(),
+        'presentCount': presentStudentIds.length,
+        'leaveCount': leaveStudentIds.length,
+        'absentCount': absentStudentIds.length,
+        'classConducted': classConducted,
+      },
+    );
   }
 
   bool _isOpen(String status) {
@@ -1134,6 +1204,20 @@ class AttendanceController extends GetxController {
         'correctedRole': role,
         'correctedAt': FieldValue.serverTimestamp(),
         'auditLogs': FieldValue.arrayUnion(<Map<String, dynamic>>[auditItem]),
+      },
+    );
+
+    await _auditLogService.log(
+      action: 'correct',
+      entityType: 'attendance',
+      entityId: session.id,
+      entityName: session.batchName,
+      note: trimmedNote,
+      meta: <String, dynamic>{
+        'dateKey': session.dateKey,
+        'presentCount': presentCount,
+        'leaveCount': leaveCount,
+        'absentCount': absentCount,
       },
     );
   }

@@ -14,6 +14,7 @@ class DashboardController extends GetxController {
   final RxList<UserModel> teachers = <UserModel>[].obs;
   final RxList<UserModel> users = <UserModel>[].obs;
   final RxBool isLoading = true.obs;
+  final RxBool isRefreshing = false.obs;
   final RxString errorText = ''.obs;
   final Rx<DateTime> lastSyncedAt = DateTime.now().obs;
 
@@ -455,6 +456,26 @@ class DashboardController extends GetxController {
             isLoading.value = false;
           },
         );
+  }
+
+  Future<void> refreshDashboard() async {
+    isRefreshing.value = true;
+    isLoading.value = true;
+    errorText.value = '';
+    _batchesSubscription?.cancel();
+    _studentsSubscription?.cancel();
+    _teachersSubscription?.cancel();
+    _usersSubscription?.cancel();
+    _todaySessionsSubscription?.cancel();
+    _recentSessionsSubscription?.cancel();
+    _listenBatches();
+    _listenStudents();
+    _listenTeachers();
+    _listenUsers();
+    _listenTodaySessions();
+    _listenRecentSessions();
+    _syncTick();
+    isRefreshing.value = false;
   }
 
   int _toInt(Object? value) {

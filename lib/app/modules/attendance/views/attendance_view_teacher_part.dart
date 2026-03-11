@@ -214,43 +214,44 @@ extension _AttendanceViewTeacherPart on AttendanceView {
     BuildContext context,
     AttendanceController controller,
   ) {
-    if (controller.isLoading.value) {
+    return Obx(() {
+      if (controller.isLoading.value) {
+        return _teacherTabBackground(
+          child: ListView(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            children: <Widget>[
+              _mobileCardSkeleton(height: 150),
+              const SizedBox(height: 12),
+              _mobileCardSkeleton(height: 210),
+              const SizedBox(height: 12),
+              _mobileCardSkeleton(height: 210),
+            ],
+          ),
+        );
+      }
+      final int totalSessions = controller.teacherTodayAssignedSessions;
+      final int totalPending = controller.teacherTodayPendingSessions;
+      final int totalSubmitted = controller.teacherTodaySubmittedSessions;
+      final int totalPresent = controller.todaySessions.fold<int>(
+        0,
+        (int sum, AdminAttendanceSession session) => sum + session.presentCount,
+      );
+      final int totalLeave = controller.todaySessions.fold<int>(
+        0,
+        (int sum, AdminAttendanceSession session) => sum + session.leaveCount,
+      );
+      final int totalAbsent = controller.todaySessions.fold<int>(
+        0,
+        (int sum, AdminAttendanceSession session) => sum + session.absentCount,
+      );
+      final List<AdminAttendanceSession> pendingSessions =
+          controller.teacherOpenSessionsToday;
+      final List<AdminAttendanceSession> recentTimeline =
+          controller.teacherRecentSubmittedSessions;
       return _teacherTabBackground(
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.md),
           children: <Widget>[
-            _mobileCardSkeleton(height: 150),
-            const SizedBox(height: 12),
-            _mobileCardSkeleton(height: 210),
-            const SizedBox(height: 12),
-            _mobileCardSkeleton(height: 210),
-          ],
-        ),
-      );
-    }
-    final int totalSessions = controller.teacherTodayAssignedSessions;
-    final int totalPending = controller.teacherTodayPendingSessions;
-    final int totalSubmitted = controller.teacherTodaySubmittedSessions;
-    final int totalPresent = controller.todaySessions.fold<int>(
-      0,
-      (int sum, AdminAttendanceSession session) => sum + session.presentCount,
-    );
-    final int totalLeave = controller.todaySessions.fold<int>(
-      0,
-      (int sum, AdminAttendanceSession session) => sum + session.leaveCount,
-    );
-    final int totalAbsent = controller.todaySessions.fold<int>(
-      0,
-      (int sum, AdminAttendanceSession session) => sum + session.absentCount,
-    );
-    final List<AdminAttendanceSession> pendingSessions =
-        controller.teacherOpenSessionsToday;
-    final List<AdminAttendanceSession> recentTimeline =
-        controller.teacherRecentSubmittedSessions;
-    return _teacherTabBackground(
-      child: ListView(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        children: <Widget>[
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
@@ -572,9 +573,10 @@ extension _AttendanceViewTeacherPart on AttendanceView {
                     }).toList(),
                   ),
           ),
-        ],
-      ),
-    );
+          ],
+        ),
+      );
+    });
   }
 
   Widget _dashboardStatCard(String label, String value, IconData icon) {
@@ -676,75 +678,75 @@ extension _AttendanceViewTeacherPart on AttendanceView {
     BuildContext context,
     AttendanceController controller,
   ) {
-    if (controller.isLoading.value) {
+    return Obx(() {
+      if (controller.isLoading.value) {
+        return _teacherTabBackground(
+          child: ListView(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            children: <Widget>[
+              _mobileCardSkeleton(height: 160),
+              const SizedBox(height: 12),
+              _mobileCardSkeleton(height: 180),
+              const SizedBox(height: 12),
+              _mobileCardSkeleton(height: 260),
+            ],
+          ),
+        );
+      }
+      final List<AdminAttendanceSession> sessions =
+          controller.filteredHistorySessions;
+      final List<BatchModel> assignedBatches =
+          controller.teacherAssignedBatches;
+      final int totalSessions = sessions.length;
+      final int submittedToday = controller.teacherTodaySubmittedSessions;
+      final int pendingToday = controller.teacherTodayPendingSessions;
+      final int totalPresent = sessions.fold<int>(
+        0,
+        (int sum, AdminAttendanceSession s) => sum + s.presentCount,
+      );
+      final int totalLeave = sessions.fold<int>(
+        0,
+        (int sum, AdminAttendanceSession s) => sum + s.leaveCount,
+      );
+      final int totalAbsent = sessions.fold<int>(
+        0,
+        (int sum, AdminAttendanceSession s) => sum + s.absentCount,
+      );
+      final int totalStrength =
+          (totalPresent + totalLeave + totalAbsent).clamp(0, 1000000);
+      final double leaveRatio = totalStrength <= 0
+          ? 0
+          : (totalLeave / totalStrength) * 100;
+      final Map<String, List<double>> byBatch = <String, List<double>>{};
+      for (final AdminAttendanceSession s in sessions) {
+        if (s.totalStudents <= 0) {
+          continue;
+        }
+        final double pct =
+            ((s.presentCount + s.leaveCount) / s.totalStudents) * 100;
+        byBatch.putIfAbsent(s.batchName, () => <double>[]).add(pct);
+      }
+      String bestBatch = '--';
+      String lowestBatch = '--';
+      double best = -1;
+      double lowest = 101;
+      byBatch.forEach((String name, List<double> values) {
+        final double avg =
+            values.reduce((double a, double b) => a + b) / values.length;
+        if (avg > best) {
+          best = avg;
+          bestBatch = name;
+        }
+        if (avg < lowest) {
+          lowest = avg;
+          lowestBatch = name;
+        }
+      });
+
       return _teacherTabBackground(
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.md),
           children: <Widget>[
-            _mobileCardSkeleton(height: 160),
-            const SizedBox(height: 12),
-            _mobileCardSkeleton(height: 180),
-            const SizedBox(height: 12),
-            _mobileCardSkeleton(height: 260),
-          ],
-        ),
-      );
-    }
-    final List<AdminAttendanceSession> sessions =
-        controller.filteredHistorySessions;
-    final List<BatchModel> assignedBatches = controller.teacherAssignedBatches;
-    final int totalSessions = sessions.length;
-    final int submittedToday = controller.teacherTodaySubmittedSessions;
-    final int pendingToday = controller.teacherTodayPendingSessions;
-    final int totalPresent = sessions.fold<int>(
-      0,
-      (int sum, AdminAttendanceSession s) => sum + s.presentCount,
-    );
-    final int totalLeave = sessions.fold<int>(
-      0,
-      (int sum, AdminAttendanceSession s) => sum + s.leaveCount,
-    );
-    final int totalAbsent = sessions.fold<int>(
-      0,
-      (int sum, AdminAttendanceSession s) => sum + s.absentCount,
-    );
-    final int totalStrength = (totalPresent + totalLeave + totalAbsent).clamp(
-      0,
-      1000000,
-    );
-    final double leaveRatio = totalStrength <= 0
-        ? 0
-        : (totalLeave / totalStrength) * 100;
-    final Map<String, List<double>> byBatch = <String, List<double>>{};
-    for (final AdminAttendanceSession s in sessions) {
-      if (s.totalStudents <= 0) {
-        continue;
-      }
-      final double pct =
-          ((s.presentCount + s.leaveCount) / s.totalStudents) * 100;
-      byBatch.putIfAbsent(s.batchName, () => <double>[]).add(pct);
-    }
-    String bestBatch = '--';
-    String lowestBatch = '--';
-    double best = -1;
-    double lowest = 101;
-    byBatch.forEach((String name, List<double> values) {
-      final double avg =
-          values.reduce((double a, double b) => a + b) / values.length;
-      if (avg > best) {
-        best = avg;
-        bestBatch = name;
-      }
-      if (avg < lowest) {
-        lowest = avg;
-        lowestBatch = name;
-      }
-    });
-
-    return _teacherTabBackground(
-      child: ListView(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        children: <Widget>[
           _teacherSectionCard(
             title: 'My Performance',
             subtitle: 'Track completion, quality and streak in one place.',
@@ -1148,9 +1150,10 @@ extension _AttendanceViewTeacherPart on AttendanceView {
               ],
             ),
           ),
-        ],
-      ),
-    );
+          ],
+        ),
+      );
+    });
   }
 
   Widget _historyRangeChip({

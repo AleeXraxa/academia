@@ -9,5 +9,6 @@ abstract class AppRoutes {
   static const String users = '/users';
   static const String attendance = '/attendance';
   static const String reports = '/reports';
+  static const String auditLogs = '/audit-logs';
   static const String settings = '/settings';
 }

@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:academia/app/data/models/batch_model.dart';
 import 'package:academia/app/data/models/student_model.dart';
+import 'package:academia/app/services/audit_log_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
 
 class StudentsController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final AuditLogService _auditLogService = AuditLogService();
 
   final RxList<StudentModel> students = <StudentModel>[].obs;
   final RxList<BatchModel> batches = <BatchModel>[].obs;
@@ -99,6 +101,9 @@ class StudentsController extends GetxController {
 
     final Map<String, int> countsByBatch = <String, int>{};
     for (final StudentModel student in source) {
+      if (_status(student) != 'active') {
+        continue;
+      }
       final String batchId = (student.batchId ?? '').trim();
       if (batchId.isEmpty) {
         continue;
@@ -143,12 +148,13 @@ class StudentsController extends GetxController {
     required String batchName,
   }) async {
     await _ensureUniqueStudentId(studentId: studentId, excludeDocId: null);
+    final String normalizedStatus = status.trim().toLowerCase();
+    final bool isActive = normalizedStatus == 'active';
+    final String normalizedBatchId = isActive ? batchId.trim() : '';
+    final String normalizedBatchName = isActive ? batchName.trim() : '';
     final DocumentReference<Map<String, dynamic>> studentDoc = _firestore
         .collection('students')
         .doc();
-    final DocumentReference<Map<String, dynamic>> batchDoc = _firestore
-        .collection('batches')
-        .doc(batchId.trim());
 
     final WriteBatch batch = _firestore.batch();
     batch.set(studentDoc, <String, dynamic>{
@@ -158,16 +164,32 @@ class StudentsController extends GetxController {
       'contactNo': contactNo.trim(),
       'parentContact': parentContact.trim(),
       'gender': gender.trim(),
-      'status': status.trim().toLowerCase(),
-      'batchId': batchId.trim(),
-      'batchName': batchName.trim(),
+      'status': normalizedStatus,
+      'batchId': normalizedBatchId,
+      'batchName': normalizedBatchName,
       'createdAt': FieldValue.serverTimestamp(),
     });
-    batch.update(batchDoc, <String, dynamic>{
-      'studentsCount': FieldValue.increment(1),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    if (isActive && normalizedBatchId.isNotEmpty) {
+      final DocumentReference<Map<String, dynamic>> batchDoc = _firestore
+          .collection('batches')
+          .doc(normalizedBatchId);
+      batch.update(batchDoc, <String, dynamic>{
+        'studentsCount': FieldValue.increment(1),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
     await batch.commit();
+    await _auditLogService.log(
+      action: 'create',
+      entityType: 'student',
+      entityId: studentDoc.id,
+      entityName: name.trim(),
+      meta: <String, dynamic>{
+        'studentId': (studentId ?? '').trim(),
+        'status': normalizedStatus,
+        'batchId': normalizedBatchId,
+      },
+    );
   }
 
   String get bulkImportTemplateCsv =>
@@ -242,21 +264,22 @@ class StudentsController extends GetxController {
         errors.add('Invalid email format.');
       }
 
-      final BatchModel? matchedBatch = _matchBatch(
-        batchId: batchIdRaw,
-        batchName: batchNameRaw,
-      );
-      if ((batchIdRaw.isEmpty && batchNameRaw.isEmpty) ||
-          matchedBatch == null) {
-        errors.add('Batch not found. Provide valid batchId or batchName.');
-      }
-
       final String statusNormalized = statusRaw.isEmpty
           ? 'active'
           : statusRaw.toLowerCase();
       const Set<String> allowedStatus = <String>{'active', 'completed', 'drop'};
       if (!allowedStatus.contains(statusNormalized)) {
         errors.add('Status must be active, completed, or drop.');
+      }
+      final BatchModel? matchedBatch = _matchBatch(
+        batchId: batchIdRaw,
+        batchName: batchNameRaw,
+      );
+      if (statusNormalized == 'active') {
+        if ((batchIdRaw.isEmpty && batchNameRaw.isEmpty) ||
+            matchedBatch == null) {
+          errors.add('Batch not found. Provide valid batchId or batchName.');
+        }
       }
 
       String genderNormalized = genderRaw.isEmpty ? 'Male' : genderRaw;
@@ -281,8 +304,9 @@ class StudentsController extends GetxController {
           parentContact: parentContact,
           gender: genderNormalized,
           status: statusNormalized,
-          batchId: matchedBatch?.id ?? '',
-          batchName: matchedBatch?.name ?? '',
+          batchId: statusNormalized == 'active' ? (matchedBatch?.id ?? '') : '',
+          batchName:
+              statusNormalized == 'active' ? (matchedBatch?.name ?? '') : '',
           errors: errors,
         ),
       );
@@ -398,6 +422,18 @@ class StudentsController extends GetxController {
           'batchName': row.batchName,
           'createdAt': FieldValue.serverTimestamp(),
         });
+        _auditLogService.addToBatch(
+          writeBatch,
+          action: 'create',
+          entityType: 'student',
+          entityId: doc.id,
+          entityName: row.fullName,
+          meta: <String, dynamic>{
+            'studentId': row.studentId,
+            'status': row.status,
+            'batchId': row.batchId,
+          },
+        );
       }
 
       try {
@@ -537,7 +573,10 @@ class StudentsController extends GetxController {
         .get();
     final String previousBatchId = (before.data()?['batchId'] as String? ?? '')
         .trim();
-    final String nextBatchId = batchId.trim();
+    final String normalizedStatus = status.trim().toLowerCase();
+    final bool isActive = normalizedStatus == 'active';
+    final String nextBatchId = isActive ? batchId.trim() : '';
+    final String nextBatchName = isActive ? batchName.trim() : '';
 
     final WriteBatch batch = _firestore.batch();
     batch.update(studentDoc, <String, dynamic>{
@@ -547,9 +586,9 @@ class StudentsController extends GetxController {
       'contactNo': contactNo.trim(),
       'parentContact': parentContact.trim(),
       'gender': gender.trim(),
-      'status': status.trim().toLowerCase(),
+      'status': normalizedStatus,
       'batchId': nextBatchId,
-      'batchName': batchName.trim(),
+      'batchName': nextBatchName,
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
@@ -573,6 +612,17 @@ class StudentsController extends GetxController {
     }
 
     await batch.commit();
+    await _auditLogService.log(
+      action: 'update',
+      entityType: 'student',
+      entityId: id.trim(),
+      entityName: name.trim(),
+      meta: <String, dynamic>{
+        'studentId': (studentId ?? '').trim(),
+        'status': normalizedStatus,
+        'batchId': nextBatchId,
+      },
+    );
   }
 
   Future<void> _ensureUniqueStudentId({
@@ -640,6 +690,16 @@ class StudentsController extends GetxController {
       });
     }
     await batch.commit();
+    await _auditLogService.log(
+      action: 'delete',
+      entityType: 'student',
+      entityId: id.trim(),
+      entityName: (before.data()?['name'] as String? ?? '').trim(),
+      meta: <String, dynamic>{
+        'studentId': (before.data()?['studentId'] as String? ?? '').trim(),
+        'batchId': batchId,
+      },
+    );
   }
 
   String statusLabel(StudentModel student) {

@@ -6,6 +6,7 @@ import 'package:academia/app/modules/students/controllers/students_controller.da
 import 'package:academia/app/routes/app_routes.dart';
 import 'package:academia/app/theme/app_colors.dart';
 import 'package:academia/app/theme/app_spacing.dart';
+import 'package:academia/app/widgets/common/app_notifier.dart';
 import 'package:academia/app/widgets/common/app_page_scaffold.dart';
 import 'package:academia/app/widgets/layout/app_shell.dart';
 import 'package:file_picker/file_picker.dart';
@@ -586,6 +587,9 @@ class StudentsView extends StatelessWidget {
     String? selectedBatchId = initialBatchId.trim().isEmpty
         ? null
         : initialBatchId;
+    if (selectedStatus.toLowerCase() != 'active') {
+      selectedBatchId = null;
+    }
     bool isSubmitting = false;
 
     await _showSaasDialog(
@@ -685,6 +689,9 @@ class StudentsView extends StatelessWidget {
                       }
                       setState(() {
                         selectedStatus = value;
+                        if (selectedStatus.toLowerCase() != 'active') {
+                          selectedBatchId = null;
+                        }
                       });
                     },
                   ),
@@ -697,6 +704,8 @@ class StudentsView extends StatelessWidget {
                     final String? dropdownValue = hasSelectedBatch
                         ? selectedBatchId
                         : null;
+                    final bool requiresBatch =
+                        selectedStatus.toLowerCase() == 'active';
                     return DropdownButtonFormField<String>(
                       value: dropdownValue,
                       decoration: const InputDecoration(
@@ -711,13 +720,25 @@ class StudentsView extends StatelessWidget {
                             ),
                           )
                           .toList(),
-                      onChanged: (String? value) {
-                        setState(() {
-                          selectedBatchId = value;
-                        });
-                      },
+                      onChanged: requiresBatch
+                          ? (String? value) {
+                              setState(() {
+                                selectedBatchId = value;
+                              });
+                            }
+                          : null,
                     );
                   }),
+                  if (selectedStatus.toLowerCase() != 'active') ...<Widget>[
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Completed/Drop students are unassigned from batches and excluded from new sessions.',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.md),
                   Row(
                     children: <Widget>[
@@ -746,18 +767,21 @@ class StudentsView extends StatelessWidget {
                                 final String batchId = (selectedBatchId ?? '')
                                     .trim();
                                 String batchName = '';
-                                for (final batch in controller.batches) {
-                                  if (batch.id == batchId) {
-                                    batchName = batch.name;
-                                    break;
+                                if (status.toLowerCase() == 'active') {
+                                  for (final batch in controller.batches) {
+                                    if (batch.id == batchId) {
+                                      batchName = batch.name;
+                                      break;
+                                    }
                                   }
                                 }
 
                                 if (name.isEmpty ||
                                     gender.isEmpty ||
                                     status.isEmpty ||
-                                    batchId.isEmpty ||
-                                    batchName.isEmpty) {
+                                    (status.toLowerCase() == 'active' &&
+                                        (batchId.isEmpty ||
+                                            batchName.isEmpty))) {
                                   return;
                                 }
 
@@ -781,58 +805,32 @@ class StudentsView extends StatelessWidget {
                                   }
                                 } catch (e) {
                                   if (context.mounted) {
-                                    await _showSaasDialog(
-                                      context: context,
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: <Widget>[
-                                          _dialogHeader(
-                                            icon: Icons.error_outline_rounded,
-                                            title: 'Unable to Save Student',
-                                            subtitle:
-                                                'Please review and try again.',
-                                            accent: AppColors.error,
-                                          ),
-                                          const SizedBox(height: AppSpacing.md),
-                                          Container(
-                                            width: double.infinity,
-                                            padding: const EdgeInsets.all(12),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFFFF5F5),
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                              border: Border.all(
-                                                color: const Color(0xFFF5D0D0),
-                                              ),
-                                            ),
-                                            child: Text(
-                                              '$e'.replaceFirst(
-                                                'Exception: ',
-                                                '',
-                                              ),
-                                              style: const TextStyle(
-                                                color: AppColors.textPrimary,
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(height: AppSpacing.md),
-                                          Align(
-                                            alignment: Alignment.centerRight,
-                                            child: FilledButton(
-                                              onPressed: () =>
-                                                  Navigator.of(context).pop(),
-                                              style: FilledButton.styleFrom(
-                                                backgroundColor:
-                                                    AppColors.error,
-                                              ),
-                                              child: const Text('OK'),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
+                                    if (AppNotifier.isNetworkError(e)) {
+                                      AppNotifier.showRetry(
+                                        title: 'Network error',
+                                        message:
+                                            'Unable to save. Check connection and retry.',
+                                        onRetry: () async {
+                                          await onSubmit(
+                                            name: name,
+                                            studentId: studentId,
+                                            email: email,
+                                            contactNo: contactNo,
+                                            parentContact: parentContact,
+                                            gender: gender,
+                                            status: status,
+                                            batchId: batchId,
+                                            batchName: batchName,
+                                          );
+                                        },
+                                      );
+                                    } else {
+                                      AppNotifier.showError(
+                                        'Unable to Save Student',
+                                        message:
+                                            AppNotifier.cleanMessage(e),
+                                      );
+                                    }
                                   }
                                 } finally {
                                   if (context.mounted) {

@@ -93,10 +93,18 @@ class LoginController extends GetxController {
       }
     } on FirebaseAuthException catch (e) {
       debugPrint('LOGIN FirebaseAuthException code=${e.code} message=${e.message}');
-      await AppMessageDialog.showError(
-        title: 'Authentication Failed',
-        message: AuthErrorMapper.loginMessage(e),
-      );
+      if (_isNetworkAuthError(e)) {
+        await AppMessageDialog.showError(
+          title: 'No Internet Connection',
+          message:
+              'We could not reach the server. Check your internet connection and try again.',
+        );
+      } else {
+        await AppMessageDialog.showError(
+          title: 'Authentication Failed',
+          message: AuthErrorMapper.loginMessage(e),
+        );
+      }
     } catch (_) {
       await AppMessageDialog.showError(
         title: 'Unexpected Error',
@@ -123,6 +131,17 @@ class LoginController extends GetxController {
       default:
         return UserRole.staff;
     }
+  }
+
+  bool _isNetworkAuthError(FirebaseAuthException e) {
+    final String code = e.code.trim().toLowerCase();
+    if (code == 'network-request-failed') {
+      return true;
+    }
+    final String message = (e.message ?? '').toLowerCase();
+    return message.contains('network') ||
+        message.contains('connection') ||
+        message.contains('socket');
   }
 
   @override

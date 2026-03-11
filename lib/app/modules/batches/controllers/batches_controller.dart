@@ -4,6 +4,7 @@ import 'package:academia/app/core/enums/user_role.dart';
 import 'package:academia/app/core/session/app_session.dart';
 import 'package:academia/app/data/models/batch_model.dart';
 import 'package:academia/app/data/models/user_model.dart';
+import 'package:academia/app/services/audit_log_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
@@ -12,6 +13,7 @@ class BatchesController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final AppSession _session = Get.find<AppSession>();
+  final AuditLogService _auditLogService = AuditLogService();
 
   final RxList<BatchModel> batches = <BatchModel>[].obs;
   final RxList<UserModel> approvedTeachers = <UserModel>[].obs;
@@ -298,7 +300,10 @@ class BatchesController extends GetxController {
         .where((String day) => day.isNotEmpty)
         .toList();
 
-    await _firestore.collection('batches').add(<String, dynamic>{
+    final DocumentReference<Map<String, dynamic>> batchDoc = _firestore
+        .collection('batches')
+        .doc();
+    await batchDoc.set(<String, dynamic>{
       'name': name.trim(),
       'nameLower': name.trim().toLowerCase(),
       'semester': semester.trim(),
@@ -314,6 +319,17 @@ class BatchesController extends GetxController {
       'createdAt': FieldValue.serverTimestamp(),
       'createdBy': (_auth.currentUser?.uid ?? '').trim(),
     });
+    await _auditLogService.log(
+      action: 'create',
+      entityType: 'batch',
+      entityId: batchDoc.id,
+      entityName: name.trim(),
+      meta: <String, dynamic>{
+        'semester': semester.trim(),
+        'curriculam': curriculam.trim(),
+        'teacherId': teacherId.trim(),
+      },
+    );
   }
 
   Future<void> updateBatch({
@@ -364,6 +380,17 @@ class BatchesController extends GetxController {
       'updatedBy': (_auth.currentUser?.uid ?? '').trim(),
       if (changeNote.trim().isNotEmpty) 'updateNote': changeNote.trim(),
     });
+    await _auditLogService.log(
+      action: 'update',
+      entityType: 'batch',
+      entityId: id.trim(),
+      entityName: name.trim(),
+      note: changeNote.trim(),
+      meta: <String, dynamic>{
+        'status': status.trim().toLowerCase(),
+        'teacherId': teacherId.trim(),
+      },
+    );
   }
 
   Future<BatchDeleteResult> deleteBatchWithGuards({
@@ -422,15 +449,12 @@ class BatchesController extends GetxController {
       );
     }
 
-    final String uid = (_auth.currentUser?.uid ?? '').trim();
-    await _firestore.collection('batch_audit_logs').add(<String, dynamic>{
-      'action': 'delete_batch',
-      'batchId': normalizedId,
-      'batchName': batchName.trim(),
-      'actorUid': uid,
-      'actorRole': _session.roleOrStaff.name,
-      'at': FieldValue.serverTimestamp(),
-    });
+    await _auditLogService.log(
+      action: 'delete',
+      entityType: 'batch',
+      entityId: normalizedId,
+      entityName: batchName.trim(),
+    );
     await batchDoc.delete();
     return const BatchDeleteResult(success: true, message: 'Batch deleted.');
   }

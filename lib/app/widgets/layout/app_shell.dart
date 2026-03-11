@@ -147,6 +147,11 @@ class _Sidebar extends StatelessWidget {
           route: AppRoutes.reports,
         ),
         _SidebarItemData(
+          icon: Icons.policy_rounded,
+          label: 'Audit Logs',
+          route: AppRoutes.auditLogs,
+        ),
+        _SidebarItemData(
           icon: Icons.settings_rounded,
           label: 'Settings',
           route: AppRoutes.settings,
@@ -205,7 +210,7 @@ class _Sidebar extends StatelessWidget {
                 const SizedBox(width: 10),
                 const Expanded(
                   child: Text(
-                    'ACADEMIA',
+                    'ATTENDX',
                     style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 1.0),
                   ),
                 ),
