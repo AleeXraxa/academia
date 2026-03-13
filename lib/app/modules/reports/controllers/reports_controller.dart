@@ -16,10 +16,16 @@ class ReportsController extends GetxController {
   final RxList<BatchOption> batches = <BatchOption>[].obs;
   final RxList<ReportSession> sessions = <ReportSession>[].obs;
   final RxList<StudentMeta> students = <StudentMeta>[].obs;
+  final RxBool isPaging = false.obs;
+  final Rxn<MonthlyStats> monthlyStats = Rxn<MonthlyStats>();
+  DocumentSnapshot<Map<String, dynamic>>? _lastSessionDoc;
+  bool _hasMoreSessions = true;
+  static const int _sessionsPageStep = 200;
 
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _batchesSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _sessionsSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _studentsSub;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _monthlySub;
 
   @override
   void onInit() {
@@ -27,6 +33,28 @@ class ReportsController extends GetxController {
     _listenBatches();
     _listenStudents();
     _listenSessions();
+    _listenMonthlyStats();
+  }
+
+
+  void _listenMonthlyStats() {
+    _monthlySub?.cancel();
+    final DateTime now = DateTime.now();
+    final String key = _monthKey(now);
+    _monthlySub = _firestore
+        .collection('reports_monthly')
+        .doc(key)
+        .snapshots()
+        .listen(
+          (DocumentSnapshot<Map<String, dynamic>> snapshot) {
+            final Map<String, dynamic> data =
+                snapshot.data() ?? <String, dynamic>{};
+            monthlyStats.value = MonthlyStats.fromMap(data, key: key);
+          },
+          onError: (_) {
+            monthlyStats.value = null;
+          },
+        );
   }
 
   void updateRangeDays(int days) {
@@ -44,6 +72,8 @@ class ReportsController extends GetxController {
   void updateSearch(String value) {
     searchQuery.value = value.trim().toLowerCase();
   }
+
+  bool get hasMoreSessions => _hasMoreSessions;
 
   List<ReportSession> get filteredSessions {
     final int days = rangeDays.value;
@@ -71,6 +101,14 @@ class ReportsController extends GetxController {
   }
 
   int get totalSessions => filteredSessions.length;
+  int get monthlySessions => monthlyStats.value?.sessions ?? 0;
+  double get monthlyAttendancePercent {
+    final MonthlyStats? stats = monthlyStats.value;
+    if (stats == null || stats.totalStudents <= 0) {
+      return 0;
+    }
+    return ((stats.present + stats.leave) / stats.totalStudents) * 100;
+  }
   int get totalPresent => filteredSessions.fold<int>(
     0,
     (int sum, ReportSession s) => sum + s.presentCount,
@@ -324,6 +362,10 @@ class ReportsController extends GetxController {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
+  String _monthKey(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}';
+  }
+
   void _listenBatches() {
     _batchesSub?.cancel();
     _batchesSub = _firestore.collection('batches').snapshots().listen(
@@ -369,28 +411,51 @@ class ReportsController extends GetxController {
     );
   }
 
+  
   void _listenSessions() {
     _sessionsSub?.cancel();
     isLoading.value = true;
-    _sessionsSub = _firestore
-        .collection('attendance_sessions')
-        .orderBy('date', descending: true)
-        .limit(1500)
-        .snapshots()
-        .listen(
-      (QuerySnapshot<Map<String, dynamic>> snapshot) {
-        final List<ReportSession> mapped = snapshot.docs.map((doc) {
-          return ReportSession.fromMap(id: doc.id, map: doc.data());
-        }).toList();
-        sessions.assignAll(mapped);
-        isLoading.value = false;
-        errorText.value = '';
-      },
-      onError: (_) {
-        errorText.value = 'Unable to load reports data.';
-        isLoading.value = false;
-      },
-    );
+    sessions.clear();
+    _lastSessionDoc = null;
+    _hasMoreSessions = true;
+    _loadMoreSessions();
+  }
+
+  Future<void> loadMoreSessions() async {
+    if (isPaging.value || !_hasMoreSessions) {
+      return;
+    }
+    isPaging.value = true;
+    await _loadMoreSessions();
+    isPaging.value = false;
+  }
+
+  Future<void> _loadMoreSessions() async {
+    try {
+      Query<Map<String, dynamic>> query = _firestore
+          .collection('attendance_sessions')
+          .orderBy('date', descending: true)
+          .limit(_sessionsPageStep);
+      if (_lastSessionDoc != null) {
+        query = query.startAfterDocument(_lastSessionDoc!);
+      }
+      final QuerySnapshot<Map<String, dynamic>> snapshot = await query.get();
+      final List<ReportSession> mapped = snapshot.docs.map((doc) {
+        return ReportSession.fromMap(id: doc.id, map: doc.data());
+      }).toList();
+      sessions.addAll(mapped);
+      if (snapshot.docs.isNotEmpty) {
+        _lastSessionDoc = snapshot.docs.last;
+      }
+      if (snapshot.docs.length < _sessionsPageStep) {
+        _hasMoreSessions = false;
+      }
+      isLoading.value = false;
+      errorText.value = '';
+    } catch (_) {
+      errorText.value = 'Unable to load reports data.';
+      isLoading.value = false;
+    }
   }
 
   @override
@@ -398,6 +463,7 @@ class ReportsController extends GetxController {
     _batchesSub?.cancel();
     _sessionsSub?.cancel();
     _studentsSub?.cancel();
+    _monthlySub?.cancel();
     super.onClose();
   }
 }
@@ -776,4 +842,38 @@ class BatchComparison {
         bestPercent = 0,
         worstName = '',
         worstPercent = 0;
+}
+
+
+class MonthlyStats {
+  const MonthlyStats({
+    required this.key,
+    required this.sessions,
+    required this.submittedSessions,
+    required this.present,
+    required this.leave,
+    required this.absent,
+    required this.totalStudents,
+  });
+
+  final String key;
+  final int sessions;
+  final int submittedSessions;
+  final int present;
+  final int leave;
+  final int absent;
+  final int totalStudents;
+
+  factory MonthlyStats.fromMap(Map<String, dynamic> map, {required String key}) {
+    int toInt(Object? value) => value is int ? value : int.tryParse('$value') ?? 0;
+    return MonthlyStats(
+      key: key,
+      sessions: toInt(map['sessions']),
+      submittedSessions: toInt(map['submittedSessions']),
+      present: toInt(map['present']),
+      leave: toInt(map['leave']),
+      absent: toInt(map['absent']),
+      totalStudents: toInt(map['totalStudents']),
+    );
+  }
 }

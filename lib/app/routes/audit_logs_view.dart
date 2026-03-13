@@ -349,7 +349,9 @@ class AuditLogsView extends StatelessWidget {
                         return Align(
                           alignment: Alignment.center,
                           child: OutlinedButton.icon(
-                            onPressed: controller.loadMore,
+                            onPressed: controller.isPaging.value
+                                ? null
+                                : () => controller.loadMore(),
                             icon: const Icon(Icons.expand_more_rounded),
                             label: const Text('Load more'),
                           ),

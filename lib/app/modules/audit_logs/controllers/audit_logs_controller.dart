@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:academia/app/data/models/audit_log_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -10,6 +10,7 @@ class AuditLogsController extends GetxController {
   final RxList<AuditLogModel> logs = <AuditLogModel>[].obs;
   final RxList<AuditLogModel> sessionLogs = <AuditLogModel>[].obs;
   final RxBool isLoading = true.obs;
+  final RxBool isPaging = false.obs;
   final RxString errorText = ''.obs;
 
   final RxInt rangeDays = 7.obs;
@@ -19,48 +20,85 @@ class AuditLogsController extends GetxController {
   final RxString search = ''.obs;
   final RxInt pageSize = 50.obs;
 
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _subscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _sessionSubscription;
+
+  DocumentSnapshot<Map<String, dynamic>>? _lastDoc;
+  bool _hasMore = true;
   static const int _pageStep = 50;
 
   @override
   void onInit() {
     super.onInit();
-    _listenLogs();
     _listenSessionAuditLogs();
+    _loadInitialLogs();
   }
 
-  void _listenLogs() {
-    _subscription?.cancel();
+  Future<void> _loadInitialLogs() async {
     isLoading.value = true;
-
-    _subscription = _firestore
-        .collection('audit_logs')
-        .orderBy('at', descending: true)
-        .limit(500)
-        .snapshots()
-        .listen(
-          (QuerySnapshot<Map<String, dynamic>> snapshot) {
-            final List<AuditLogModel> mapped = snapshot.docs
-                .map(
-                  (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
-                      AuditLogModel.fromMap(id: doc.id, map: doc.data()),
-                )
-                .toList();
-            logs.assignAll(mapped);
-            errorText.value = '';
-            isLoading.value = false;
-            if (pageSize.value < _pageStep) {
-              resetPagination();
-            }
-          },
-          onError: (_) {
-            errorText.value = 'Failed to load audit logs.';
-            isLoading.value = false;
-          },
-        );
+    errorText.value = '';
+    logs.clear();
+    _lastDoc = null;
+    _hasMore = true;
+    await _loadMoreInternal();
+    isLoading.value = false;
   }
 
+  Future<void> loadMore() async {
+    if (isPaging.value || !_hasMore) {
+      return;
+    }
+    isPaging.value = true;
+    await _loadMoreInternal();
+    isPaging.value = false;
+  }
+
+  Future<void> _loadMoreInternal() async {
+    try {
+      Query<Map<String, dynamic>> query = _firestore
+          .collection('audit_logs')
+          .orderBy('at', descending: true)
+          .limit(_pageStep);
+      if (_lastDoc != null) {
+        query = query.startAfterDocument(_lastDoc!);
+      }
+      final QuerySnapshot<Map<String, dynamic>> snapshot = await query.get();
+      if (snapshot.docs.isNotEmpty) {
+        _lastDoc = snapshot.docs.last;
+        final List<AuditLogModel> mapped = snapshot.docs
+            .map(
+              (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
+                  AuditLogModel.fromMap(id: doc.id, map: doc.data()),
+            )
+            .toList();
+        logs.addAll(mapped);
+      }
+      if (snapshot.docs.length < _pageStep) {
+        _hasMore = false;
+      }
+    } catch (_) {
+      errorText.value = 'Failed to load audit logs.';
+    }
+  }
+
+  void updateRangeDays(int value) {
+    rangeDays.value = value;
+  }
+
+  void updateEntityType(String value) {
+    entityType.value = value.trim().toLowerCase();
+  }
+
+  void updateAction(String value) {
+    action.value = value.trim().toLowerCase();
+  }
+
+  void updateActorRole(String value) {
+    actorRole.value = value.trim().toLowerCase();
+  }
+
+  void updateSearch(String value) {
+    search.value = value.trim().toLowerCase();
+  }
 
   void _listenSessionAuditLogs() {
     _sessionSubscription?.cancel();
@@ -115,43 +153,6 @@ class AuditLogsController extends GetxController {
         );
   }
 
-  void updateRangeDays(int value) {
-    rangeDays.value = value;
-    resetPagination();
-  }
-
-  void updateEntityType(String value) {
-    entityType.value = value.trim().toLowerCase();
-    resetPagination();
-  }
-
-  void updateAction(String value) {
-    action.value = value.trim().toLowerCase();
-    resetPagination();
-  }
-
-  void updateActorRole(String value) {
-    actorRole.value = value.trim().toLowerCase();
-    resetPagination();
-  }
-
-  void updateSearch(String value) {
-    search.value = value.trim().toLowerCase();
-    resetPagination();
-  }
-
-  void resetPagination() {
-    pageSize.value = _pageStep;
-  }
-
-  void loadMore() {
-    final int total = filteredLogs.length;
-    if (pageSize.value >= total) {
-      return;
-    }
-    pageSize.value = (pageSize.value + _pageStep).clamp(0, total);
-  }
-
   List<AuditLogModel> get allLogs => <AuditLogModel>[...logs, ...sessionLogs];
 
   List<AuditLogModel> get filteredLogs {
@@ -199,7 +200,7 @@ class AuditLogsController extends GetxController {
     return filtered.take(pageSize.value).toList();
   }
 
-  bool get hasMoreLogs => filteredLogs.length > pagedLogs.length;
+  bool get hasMoreLogs => _hasMore;
 
   int get totalLogs => allLogs.length;
 
@@ -224,7 +225,6 @@ class AuditLogsController extends GetxController {
 
   @override
   void onClose() {
-    _subscription?.cancel();
     _sessionSubscription?.cancel();
     super.onClose();
   }
