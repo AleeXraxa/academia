@@ -6,16 +6,17 @@ class AppTheme {
   AppTheme._();
 
   static ThemeData light() {
-    final ColorScheme colorScheme = ColorScheme.fromSeed(
-      seedColor: AppColors.accent,
-      brightness: Brightness.light,
-    ).copyWith(
-      primary: AppColors.accent,
-      secondary: AppColors.accent,
-      surface: AppColors.surface,
-      outline: AppColors.border,
-      error: AppColors.error,
-    );
+    final ColorScheme colorScheme =
+        ColorScheme.fromSeed(
+          seedColor: AppColors.accent,
+          brightness: Brightness.light,
+        ).copyWith(
+          primary: AppColors.accent,
+          secondary: AppColors.accent,
+          surface: AppColors.surface,
+          outline: AppColors.border,
+          error: AppColors.error,
+        );
 
     return ThemeData(
       useMaterial3: true,
@@ -36,28 +37,41 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        fillColor: const Color(0xFFF7F9FF),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 12,
+        ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.border),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: AppColors.accent.withValues(alpha: 0.8),
+          ),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           side: const BorderSide(color: AppColors.border),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       ),
     );

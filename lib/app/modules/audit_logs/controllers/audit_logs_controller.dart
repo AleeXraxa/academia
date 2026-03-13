@@ -8,6 +8,7 @@ class AuditLogsController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   final RxList<AuditLogModel> logs = <AuditLogModel>[].obs;
+  final RxList<AuditLogModel> sessionLogs = <AuditLogModel>[].obs;
   final RxBool isLoading = true.obs;
   final RxString errorText = ''.obs;
 
@@ -19,12 +20,14 @@ class AuditLogsController extends GetxController {
   final RxInt pageSize = 50.obs;
 
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _subscription;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _sessionSubscription;
   static const int _pageStep = 50;
 
   @override
   void onInit() {
     super.onInit();
     _listenLogs();
+    _listenSessionAuditLogs();
   }
 
   void _listenLogs() {
@@ -54,6 +57,60 @@ class AuditLogsController extends GetxController {
           onError: (_) {
             errorText.value = 'Failed to load audit logs.';
             isLoading.value = false;
+          },
+        );
+  }
+
+
+  void _listenSessionAuditLogs() {
+    _sessionSubscription?.cancel();
+    _sessionSubscription = _firestore
+        .collection('attendance_sessions')
+        .orderBy('updatedAt', descending: true)
+        .limit(300)
+        .snapshots()
+        .listen(
+          (QuerySnapshot<Map<String, dynamic>> snapshot) {
+            final List<AuditLogModel> mapped = <AuditLogModel>[];
+            for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
+                in snapshot.docs) {
+              final Map<String, dynamic> data = doc.data();
+              final List<dynamic> rawLogs =
+                  (data['auditLogs'] as List<dynamic>?) ?? <dynamic>[];
+              final String batchName = (data['batchName'] as String? ?? '').trim();
+              for (int i = 0; i < rawLogs.length; i += 1) {
+                final Object? raw = rawLogs[i];
+                if (raw is! Map) {
+                  continue;
+                }
+                final Map<String, dynamic> entry =
+                    Map<String, dynamic>.from(raw as Map);
+                final Map<String, dynamic> normalized = <String, dynamic>{
+                  'action': (entry['action'] ?? 'submit').toString(),
+                  'entityType': (entry['entityType'] ?? 'attendance').toString(),
+                  'entityId': (entry['entityId'] ?? doc.id).toString(),
+                  'entityName': (entry['entityName'] ?? batchName).toString(),
+                  'actorId': (entry['actorId'] ?? '').toString(),
+                  'actorEmail': (entry['actorEmail'] ?? '').toString(),
+                  'actorRole': (entry['actorRole'] ?? '').toString(),
+                  'note': (entry['note'] ?? '').toString(),
+                  'meta': entry['meta'] is Map
+                      ? Map<String, dynamic>.from(entry['meta'] as Map)
+                      : <String, dynamic>{},
+                  'at': entry['at'] ?? Timestamp.now(),
+                };
+                mapped.add(
+                  AuditLogModel.fromMap(
+                    id: 'session_${doc.id}_$i',
+                    map: normalized,
+                  ),
+                );
+              }
+            }
+            sessionLogs.assignAll(mapped);
+          },
+          onError: (_) {
+            sessionLogs.clear();
           },
         );
   }
@@ -95,6 +152,8 @@ class AuditLogsController extends GetxController {
     pageSize.value = (pageSize.value + _pageStep).clamp(0, total);
   }
 
+  List<AuditLogModel> get allLogs => <AuditLogModel>[...logs, ...sessionLogs];
+
   List<AuditLogModel> get filteredLogs {
     final int days = rangeDays.value;
     final String type = entityType.value.trim().toLowerCase();
@@ -108,7 +167,7 @@ class AuditLogsController extends GetxController {
         : DateTime(now.year, now.month, now.day)
             .subtract(Duration(days: days - 1));
 
-    return logs.where((AuditLogModel item) {
+    return allLogs.where((AuditLogModel item) {
       final String itemType = item.entityType.trim().toLowerCase();
       final String itemAction = item.action.trim().toLowerCase();
       final String itemRole = item.actorRole.trim().toLowerCase();
@@ -142,22 +201,22 @@ class AuditLogsController extends GetxController {
 
   bool get hasMoreLogs => filteredLogs.length > pagedLogs.length;
 
-  int get totalLogs => logs.length;
+  int get totalLogs => allLogs.length;
 
   int get todayLogs {
     final DateTime now = DateTime.now();
     final DateTime start = DateTime(now.year, now.month, now.day);
-    return logs.where((AuditLogModel item) {
+    return allLogs.where((AuditLogModel item) {
       final DateTime date = item.at ?? DateTime(2000, 1, 1);
       return !date.isBefore(start);
     }).length;
   }
 
-  int get userActions => logs
+  int get userActions => allLogs
       .where((AuditLogModel item) => item.entityType.toLowerCase() == 'user')
       .length;
 
-  int get attendanceActions => logs
+  int get attendanceActions => allLogs
       .where((AuditLogModel item) =>
           item.entityType.toLowerCase() == 'attendance' ||
           item.entityType.toLowerCase() == 'session')
@@ -166,6 +225,7 @@ class AuditLogsController extends GetxController {
   @override
   void onClose() {
     _subscription?.cancel();
+    _sessionSubscription?.cancel();
     super.onClose();
   }
 }

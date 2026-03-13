@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:academia/app/services/network_guard.dart';
 import 'package:get/get.dart';
 
 class SettingsController extends GetxController {
@@ -85,18 +86,20 @@ class SettingsController extends GetxController {
   }) async {
     isSaving.value = true;
     try {
-      await _firestore.collection('app_settings').doc('general').set(
-        <String, dynamic>{
-          'instituteName': instituteNameValue.trim(),
-          'supportEmail': supportEmailValue.trim(),
-          'defaultHistoryDays': historyDays,
-          'lockSubmittedSessions': lockSubmittedSessions.value,
-          'requireCorrectionNote': requireCorrectionNote.value,
-          'includeLeaveInAttendance': includeLeaveInAttendance.value,
-          'appVersion': appVersion.value,
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
+      await NetworkGuard.run(
+        _firestore.collection('app_settings').doc('general').set(
+          <String, dynamic>{
+            'instituteName': instituteNameValue.trim(),
+            'supportEmail': supportEmailValue.trim(),
+            'defaultHistoryDays': historyDays,
+            'lockSubmittedSessions': lockSubmittedSessions.value,
+            'requireCorrectionNote': requireCorrectionNote.value,
+            'includeLeaveInAttendance': includeLeaveInAttendance.value,
+            'appVersion': appVersion.value,
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        ),
       );
       instituteName.value = instituteNameValue.trim();
       supportEmail.value = supportEmailValue.trim();

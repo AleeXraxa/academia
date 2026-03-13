@@ -1,8 +1,9 @@
-﻿import 'package:academia/app/data/models/audit_log_model.dart';
+import 'package:academia/app/data/models/audit_log_model.dart';
 import 'package:academia/app/modules/audit_logs/controllers/audit_logs_controller.dart';
 import 'package:academia/app/routes/app_routes.dart';
 import 'package:academia/app/theme/app_colors.dart';
 import 'package:academia/app/theme/app_spacing.dart';
+import 'package:academia/app/widgets/common/app_dropdown_form_field.dart';
 import 'package:academia/app/widgets/common/app_page_scaffold.dart';
 import 'package:academia/app/widgets/layout/app_shell.dart';
 import 'package:flutter/material.dart';
@@ -210,13 +211,10 @@ class AuditLogsView extends StatelessWidget {
   }
 
   Widget _rangeField(AuditLogsController controller) {
-    return DropdownButtonFormField<int>(
-      isExpanded: true,
+    return AppDropdownFormField<int>(
+      labelText: 'Date Range',
+      prefixIcon: Icons.date_range_rounded,
       value: controller.rangeDays.value,
-      decoration: const InputDecoration(
-        labelText: 'Date Range',
-        prefixIcon: Icon(Icons.date_range_rounded),
-      ),
       items: const <DropdownMenuItem<int>>[
         DropdownMenuItem<int>(value: 1, child: Text('Today')),
         DropdownMenuItem<int>(value: 7, child: Text('Last 7 days')),
@@ -229,22 +227,22 @@ class AuditLogsView extends StatelessWidget {
   }
 
   Widget _typeField(AuditLogsController controller) {
-    return DropdownButtonFormField<String>(
-      isExpanded: true,
+    return AppDropdownFormField<String>(
+      labelText: 'Entity',
+      prefixIcon: Icons.layers_rounded,
       value: controller.entityType.value.isEmpty
           ? ''
           : controller.entityType.value,
-      decoration: const InputDecoration(
-        labelText: 'Entity',
-        prefixIcon: Icon(Icons.layers_rounded),
-      ),
       items: const <DropdownMenuItem<String>>[
         DropdownMenuItem<String>(value: '', child: Text('All entities')),
         DropdownMenuItem<String>(value: 'user', child: Text('Users')),
         DropdownMenuItem<String>(value: 'batch', child: Text('Batches')),
         DropdownMenuItem<String>(value: 'student', child: Text('Students')),
         DropdownMenuItem<String>(value: 'session', child: Text('Sessions')),
-        DropdownMenuItem<String>(value: 'attendance', child: Text('Attendance')),
+        DropdownMenuItem<String>(
+          value: 'attendance',
+          child: Text('Attendance'),
+        ),
         DropdownMenuItem<String>(value: 'settings', child: Text('Settings')),
       ],
       onChanged: (String? value) => controller.updateEntityType(value ?? ''),
@@ -252,13 +250,10 @@ class AuditLogsView extends StatelessWidget {
   }
 
   Widget _actionField(AuditLogsController controller) {
-    return DropdownButtonFormField<String>(
-      isExpanded: true,
+    return AppDropdownFormField<String>(
+      labelText: 'Action',
+      prefixIcon: Icons.flash_on_rounded,
       value: controller.action.value.isEmpty ? '' : controller.action.value,
-      decoration: const InputDecoration(
-        labelText: 'Action',
-        prefixIcon: Icon(Icons.flash_on_rounded),
-      ),
       items: const <DropdownMenuItem<String>>[
         DropdownMenuItem<String>(value: '', child: Text('All actions')),
         DropdownMenuItem<String>(value: 'create', child: Text('Create')),
@@ -277,20 +272,20 @@ class AuditLogsView extends StatelessWidget {
   }
 
   Widget _roleField(AuditLogsController controller) {
-    return DropdownButtonFormField<String>(
-      isExpanded: true,
+    return AppDropdownFormField<String>(
+      labelText: 'Actor Role',
+      prefixIcon: Icons.person_rounded,
       value: controller.actorRole.value.isEmpty
           ? ''
           : controller.actorRole.value,
-      decoration: const InputDecoration(
-        labelText: 'Actor Role',
-        prefixIcon: Icon(Icons.person_rounded),
-      ),
       items: const <DropdownMenuItem<String>>[
         DropdownMenuItem<String>(value: '', child: Text('All roles')),
         DropdownMenuItem<String>(value: 'cah', child: Text('CAH')),
         DropdownMenuItem<String>(value: 'administrator', child: Text('Admin')),
-        DropdownMenuItem<String>(value: 'superadmin', child: Text('Super Admin')),
+        DropdownMenuItem<String>(
+          value: 'superadmin',
+          child: Text('Super Admin'),
+        ),
         DropdownMenuItem<String>(value: 'teacher', child: Text('Teacher')),
         DropdownMenuItem<String>(value: 'staff', child: Text('Staff')),
       ],
@@ -361,7 +356,7 @@ class AuditLogsView extends StatelessWidget {
                         );
                       }
                       final AuditLogModel log = logs[index];
-                      return _logTile(log);
+                      return _logTile(context, log);
                     },
                   ),
           ),
@@ -370,12 +365,12 @@ class AuditLogsView extends StatelessWidget {
     );
   }
 
-  Widget _logTile(AuditLogModel log) {
+  Widget _logTile(BuildContext context, AuditLogModel log) {
     final String title = _actionTitle(log.action, log.entityType);
     final String dateLabel = _formatDate(log.at);
     final Color accent = _actionColor(log.action);
 
-    return Container(
+    final Widget card = Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFFFCFDFF),
@@ -394,11 +389,7 @@ class AuditLogsView extends StatelessWidget {
                   color: accent.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(
-                  _actionIcon(log.action),
-                  size: 18,
-                  color: accent,
-                ),
+                child: Icon(_actionIcon(log.action), size: 18, color: accent),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -414,7 +405,7 @@ class AuditLogsView extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${log.entityType.toUpperCase()} · ${log.entityName.isEmpty ? log.entityId : log.entityName}',
+                      '${log.entityType.toUpperCase()} � ${log.entityName.isEmpty ? log.entityId : log.entityName}',
                       style: const TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -452,7 +443,7 @@ class AuditLogsView extends StatelessWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  '${log.actorEmail.isEmpty ? 'Unknown' : log.actorEmail} · ${log.actorRole.toUpperCase()}',
+                  '${log.actorEmail.isEmpty ? 'Unknown' : log.actorEmail} � ${log.actorRole.toUpperCase()}',
                   style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 12,
@@ -503,6 +494,186 @@ class AuditLogsView extends StatelessWidget {
                   .toList(),
             ),
           ],
+        ],
+      ),
+    );
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => _openLogDetail(context, log),
+      child: card,
+    );
+  }
+
+  void _openLogDetail(BuildContext context, AuditLogModel log) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext sheetContext) {
+        return Container(
+          margin: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.border),
+            boxShadow: const <BoxShadow>[
+              BoxShadow(
+                color: Color(0x220F172A),
+                blurRadius: 24,
+                offset: Offset(0, 12),
+              ),
+            ],
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: _actionColor(log.action).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        _actionIcon(log.action),
+                        color: _actionColor(log.action),
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            _actionTitle(log.action, log.entityType),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _formatDate(log.at),
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _detailRow('Entity', log.entityType),
+                _detailRow(
+                  'Entity Name',
+                  log.entityName.isEmpty ? '--' : log.entityName,
+                ),
+                _detailRow(
+                  'Entity ID',
+                  log.entityId.isEmpty ? '--' : log.entityId,
+                ),
+                _detailRow(
+                  'Actor',
+                  log.actorEmail.isEmpty ? 'Unknown' : log.actorEmail,
+                ),
+                _detailRow(
+                  'Role',
+                  log.actorRole.isEmpty ? '--' : log.actorRole,
+                ),
+                if (log.note.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Note',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    log.note,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+                if (log.meta.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Metadata',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: log.meta.entries.map((entry) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3F6FE),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: const Color(0xFFE2EAF8)),
+                        ),
+                        child: Text(
+                          '${entry.key}: ${entry.value}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: <Widget>[
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          ),
         ],
       ),
     );

@@ -1,4 +1,5 @@
 import 'package:academia/app/data/models/attendance_model.dart';
+import 'package:academia/app/services/network_guard.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AttendanceRepository {
@@ -41,22 +42,38 @@ class AttendanceRepository {
     return _firestore.collection('attendance_sessions').doc(sessionId).get();
   }
 
+  Future<QuerySnapshot<Map<String, dynamic>>> fetchSessionsByDateAndBatch({
+    required String dateKey,
+    required String batchId,
+  }) {
+    return _firestore
+        .collection('attendance_sessions')
+        .where('dateKey', isEqualTo: dateKey.trim())
+        .where('batchId', isEqualTo: batchId.trim())
+        .limit(1)
+        .get();
+  }
+
   Future<void> setSession({
     required String sessionId,
     required Map<String, dynamic> data,
     bool merge = true,
   }) {
-    return _firestore
-        .collection('attendance_sessions')
-        .doc(sessionId)
-        .set(data, SetOptions(merge: merge));
+    return NetworkGuard.run(
+      _firestore
+          .collection('attendance_sessions')
+          .doc(sessionId)
+          .set(data, SetOptions(merge: merge)),
+    );
   }
 
   Future<void> updateSession({
     required String sessionId,
     required Map<String, dynamic> data,
   }) {
-    return _firestore.collection('attendance_sessions').doc(sessionId).update(data);
+    return NetworkGuard.run(
+      _firestore.collection('attendance_sessions').doc(sessionId).update(data),
+    );
   }
 
   Future<void> batchSetSessions(Map<String, Map<String, dynamic>> sessions) async {
@@ -67,7 +84,7 @@ class AttendanceRepository {
           .doc(sessionId);
       writeBatch.set(doc, data, SetOptions(merge: true));
     });
-    await writeBatch.commit();
+    await NetworkGuard.run(writeBatch.commit());
   }
 
   Future<QuerySnapshot<Map<String, dynamic>>> fetchStudentsForBatch(
@@ -88,3 +105,5 @@ class AttendanceRepository {
         .get();
   }
 }
+
+

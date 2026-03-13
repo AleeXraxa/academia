@@ -6,9 +6,11 @@ import 'package:academia/app/modules/students/controllers/students_controller.da
 import 'package:academia/app/routes/app_routes.dart';
 import 'package:academia/app/theme/app_colors.dart';
 import 'package:academia/app/theme/app_spacing.dart';
+import 'package:academia/app/widgets/common/app_dropdown_form_field.dart';
 import 'package:academia/app/widgets/common/app_notifier.dart';
 import 'package:academia/app/widgets/common/app_page_scaffold.dart';
 import 'package:academia/app/widgets/layout/app_shell.dart';
+import 'package:academia/app/services/network_guard.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -591,279 +593,304 @@ class StudentsView extends StatelessWidget {
       selectedBatchId = null;
     }
     bool isSubmitting = false;
+    String? formError;
 
     await _showSaasDialog(
       context: context,
       child: StatefulBuilder(
-        builder:
-            (BuildContext context, void Function(void Function()) setState) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+        builder: (BuildContext context, void Function(void Function()) setState) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              _dialogHeader(
+                icon: Icons.edit_note_rounded,
+                title: title,
+                subtitle: 'Manage student identity and lifecycle status.',
+                accent: AppColors.accent,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Full Name',
+                  prefixIcon: Icon(Icons.person_outline_rounded),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              TextField(
+                controller: studentIdController,
+                decoration: const InputDecoration(
+                  labelText: 'StudentID (Optional)',
+                  prefixIcon: Icon(Icons.badge_outlined),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              TextField(
+                controller: emailController,
+                decoration: const InputDecoration(
+                  labelText: 'Email Address (Optional)',
+                  prefixIcon: Icon(Icons.mail_outline_rounded),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              TextField(
+                controller: contactNoController,
+                decoration: const InputDecoration(
+                  labelText: 'Contact No (Optional)',
+                  prefixIcon: Icon(Icons.phone_outlined),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              TextField(
+                controller: parentContactController,
+                decoration: const InputDecoration(
+                  labelText: 'Parent Contact (Optional)',
+                  prefixIcon: Icon(Icons.call_outlined),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              AppDropdownFormField<String>(
+                labelText: 'Gender',
+                prefixIcon: Icons.wc_outlined,
+                value: selectedGender,
+                items: const <DropdownMenuItem<String>>[
+                  DropdownMenuItem(value: 'Male', child: Text('Male')),
+                  DropdownMenuItem(value: 'Female', child: Text('Female')),
+                  DropdownMenuItem(value: 'Other', child: Text('Other')),
+                ],
+                onChanged: (String? value) {
+                  if (value == null) {
+                    return;
+                  }
+                  setState(() {
+                    selectedGender = value;
+                  });
+                },
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              AppDropdownFormField<String>(
+                labelText: 'Status',
+                prefixIcon: Icons.flag_outlined,
+                value: selectedStatus,
+                items: const <DropdownMenuItem<String>>[
+                  DropdownMenuItem(value: 'Active', child: Text('Active')),
+                  DropdownMenuItem(
+                    value: 'Completed',
+                    child: Text('Completed'),
+                  ),
+                  DropdownMenuItem(value: 'Drop', child: Text('Drop')),
+                ],
+                onChanged: (String? value) {
+                  if (value == null) {
+                    return;
+                  }
+                  setState(() {
+                    selectedStatus = value;
+                    if (selectedStatus.toLowerCase() != 'active') {
+                      selectedBatchId = null;
+                    }
+                  });
+                },
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Obx(() {
+                final batches = controller.batches;
+                final bool hasSelectedBatch =
+                    selectedBatchId != null &&
+                    batches.any((batch) => batch.id == selectedBatchId);
+                final String? dropdownValue = hasSelectedBatch
+                    ? selectedBatchId
+                    : null;
+                final bool requiresBatch =
+                    selectedStatus.toLowerCase() == 'active';
+                return AppDropdownFormField<String>(
+                  labelText: 'Batch',
+                  prefixIcon: Icons.class_outlined,
+                  value: dropdownValue,
+                  enabled: requiresBatch,
+                  items: batches
+                      .map(
+                        (batch) => DropdownMenuItem<String>(
+                          value: batch.id,
+                          child: Text(batch.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (String? value) {
+                    setState(() {
+                      selectedBatchId = value;
+                    });
+                  },
+                );
+              }),
+              if (selectedStatus.toLowerCase() != 'active') ...<Widget>[
+                const SizedBox(height: 6),
+                const Text(
+                  'Completed/Drop students are unassigned from batches and excluded from new sessions.',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+              const SizedBox(height: AppSpacing.md),
+              Row(
                 children: <Widget>[
-                  _dialogHeader(
-                    icon: Icons.edit_note_rounded,
-                    title: title,
-                    subtitle: 'Manage student identity and lifecycle status.',
-                    accent: AppColors.accent,
+                  OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
                   ),
-                  const SizedBox(height: AppSpacing.md),
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Full Name',
-                      prefixIcon: Icon(Icons.person_outline_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  TextField(
-                    controller: studentIdController,
-                    decoration: const InputDecoration(
-                      labelText: 'StudentID (Optional)',
-                      prefixIcon: Icon(Icons.badge_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  TextField(
-                    controller: emailController,
-                    decoration: const InputDecoration(
-                      labelText: 'Email Address (Optional)',
-                      prefixIcon: Icon(Icons.mail_outline_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  TextField(
-                    controller: contactNoController,
-                    decoration: const InputDecoration(
-                      labelText: 'Contact No (Optional)',
-                      prefixIcon: Icon(Icons.phone_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  TextField(
-                    controller: parentContactController,
-                    decoration: const InputDecoration(
-                      labelText: 'Parent Contact (Optional)',
-                      prefixIcon: Icon(Icons.call_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  DropdownButtonFormField<String>(
-                    value: selectedGender,
-                    decoration: const InputDecoration(
-                      labelText: 'Gender',
-                      prefixIcon: Icon(Icons.wc_outlined),
-                    ),
-                    items: const <DropdownMenuItem<String>>[
-                      DropdownMenuItem(value: 'Male', child: Text('Male')),
-                      DropdownMenuItem(value: 'Female', child: Text('Female')),
-                      DropdownMenuItem(value: 'Other', child: Text('Other')),
-                    ],
-                    onChanged: (String? value) {
-                      if (value == null) {
-                        return;
-                      }
-                      setState(() {
-                        selectedGender = value;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  DropdownButtonFormField<String>(
-                    value: selectedStatus,
-                    decoration: const InputDecoration(
-                      labelText: 'Status',
-                      prefixIcon: Icon(Icons.flag_outlined),
-                    ),
-                    items: const <DropdownMenuItem<String>>[
-                      DropdownMenuItem(value: 'Active', child: Text('Active')),
-                      DropdownMenuItem(
-                        value: 'Completed',
-                        child: Text('Completed'),
-                      ),
-                      DropdownMenuItem(value: 'Drop', child: Text('Drop')),
-                    ],
-                    onChanged: (String? value) {
-                      if (value == null) {
-                        return;
-                      }
-                      setState(() {
-                        selectedStatus = value;
-                        if (selectedStatus.toLowerCase() != 'active') {
-                          selectedBatchId = null;
-                        }
-                      });
-                    },
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Obx(() {
-                    final batches = controller.batches;
-                    final bool hasSelectedBatch =
-                        selectedBatchId != null &&
-                        batches.any((batch) => batch.id == selectedBatchId);
-                    final String? dropdownValue = hasSelectedBatch
-                        ? selectedBatchId
-                        : null;
-                    final bool requiresBatch =
-                        selectedStatus.toLowerCase() == 'active';
-                    return DropdownButtonFormField<String>(
-                      value: dropdownValue,
-                      decoration: const InputDecoration(
-                        labelText: 'Batch',
-                        prefixIcon: Icon(Icons.class_outlined),
-                      ),
-                      items: batches
-                          .map(
-                            (batch) => DropdownMenuItem<String>(
-                              value: batch.id,
-                              child: Text(batch.name),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: requiresBatch
-                          ? (String? value) {
-                              setState(() {
-                                selectedBatchId = value;
-                              });
+                  const Spacer(),
+                  FilledButton.icon(
+                    onPressed: isSubmitting
+                        ? null
+                        : () async {
+                            final String name = nameController.text.trim();
+                            final String studentId = studentIdController.text
+                                .trim();
+                            final String email = emailController.text.trim();
+                            final String contactNo = contactNoController.text
+                                .trim();
+                            final String parentContact = parentContactController
+                                .text
+                                .trim();
+                            final String gender = selectedGender.trim();
+                            final String status = selectedStatus.trim();
+                            final String batchId = (selectedBatchId ?? '')
+                                .trim();
+                            String batchName = '';
+                            if (status.toLowerCase() == 'active') {
+                              for (final batch in controller.batches) {
+                                if (batch.id == batchId) {
+                                  batchName = batch.name;
+                                  break;
+                                }
+                              }
                             }
-                          : null,
-                    );
-                  }),
-                  if (selectedStatus.toLowerCase() != 'active') ...<Widget>[
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Completed/Drop students are unassigned from batches and excluded from new sessions.',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: AppSpacing.md),
-                  Row(
-                    children: <Widget>[
-                      OutlinedButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Cancel'),
-                      ),
-                      const Spacer(),
-                      FilledButton.icon(
-                        onPressed: isSubmitting
-                            ? null
-                            : () async {
-                                final String name = nameController.text.trim();
-                                final String studentId = studentIdController
-                                    .text
-                                    .trim();
-                                final String email = emailController.text
-                                    .trim();
-                                final String contactNo = contactNoController
-                                    .text
-                                    .trim();
-                                final String parentContact =
-                                    parentContactController.text.trim();
-                                final String gender = selectedGender.trim();
-                                final String status = selectedStatus.trim();
-                                final String batchId = (selectedBatchId ?? '')
-                                    .trim();
-                                String batchName = '';
-                                if (status.toLowerCase() == 'active') {
-                                  for (final batch in controller.batches) {
-                                    if (batch.id == batchId) {
-                                      batchName = batch.name;
-                                      break;
-                                    }
-                                  }
-                                }
 
-                                if (name.isEmpty ||
-                                    gender.isEmpty ||
-                                    status.isEmpty ||
-                                    (status.toLowerCase() == 'active' &&
-                                        (batchId.isEmpty ||
-                                            batchName.isEmpty))) {
-                                  return;
-                                }
+                            if (name.isEmpty ||
+                                gender.isEmpty ||
+                                status.isEmpty ||
+                                (status.toLowerCase() == 'active' &&
+                                    (batchId.isEmpty || batchName.isEmpty))) {
+                              setState(() {
+                                formError =
+                                    'Please complete all required fields.';
+                              });
+                              return;
+                            }
 
-                                setState(() {
-                                  isSubmitting = true;
-                                });
-                                try {
-                                  await onSubmit(
-                                    name: name,
-                                    studentId: studentId,
-                                    email: email,
-                                    contactNo: contactNo,
-                                    parentContact: parentContact,
-                                    gender: gender,
-                                    status: status,
-                                    batchId: batchId,
-                                    batchName: batchName,
-                                  );
-                                  if (context.mounted) {
-                                    Navigator.of(context).pop();
-                                  }
-                                } catch (e) {
-                                  if (context.mounted) {
-                                    if (AppNotifier.isNetworkError(e)) {
-                                      AppNotifier.showRetry(
-                                        title: 'Network error',
-                                        message:
-                                            'Unable to save. Check connection and retry.',
-                                        onRetry: () async {
-                                          await onSubmit(
-                                            name: name,
-                                            studentId: studentId,
-                                            email: email,
-                                            contactNo: contactNo,
-                                            parentContact: parentContact,
-                                            gender: gender,
-                                            status: status,
-                                            batchId: batchId,
-                                            batchName: batchName,
-                                          );
-                                        },
-                                      );
-                                    } else {
-                                      AppNotifier.showError(
-                                        'Unable to Save Student',
-                                        message:
-                                            AppNotifier.cleanMessage(e),
-                                      );
-                                    }
-                                  }
-                                } finally {
-                                  if (context.mounted) {
-                                    setState(() {
-                                      isSubmitting = false;
-                                    });
-                                  }
-                                }
-                              },
-                        icon: isSubmitting
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
+                            setState(() {
+                              isSubmitting = true;
+                              formError = null;
+                            });
+                            try {
+                              await NetworkGuard.run(
+                                onSubmit(
+                                  name: name,
+                                  studentId: studentId,
+                                  email: email,
+                                  contactNo: contactNo,
+                                  parentContact: parentContact,
+                                  gender: gender,
+                                  status: status,
+                                  batchId: batchId,
+                                  batchName: batchName,
                                 ),
-                              )
-                            : const Icon(Icons.check_rounded),
-                        label: Text(isSubmitting ? 'Saving...' : actionLabel),
-                      ),
-                    ],
+                              );
+                              if (context.mounted) {
+                                Navigator.of(context).pop();
+                                await _showSaasDialog(
+                                  context: context,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: <Widget>[
+                                      _dialogHeader(
+                                        icon:
+                                            Icons.check_circle_outline_rounded,
+                                        title: actionLabel == 'Create'
+                                            ? 'Student Added'
+                                            : 'Student Updated',
+                                        subtitle: actionLabel == 'Create'
+                                            ? 'Student profile created successfully.'
+                                            : 'Student profile updated successfully.',
+                                        accent: AppColors.success,
+                                      ),
+                                      const SizedBox(height: AppSpacing.md),
+                                      Align(
+                                        alignment: Alignment.centerRight,
+                                        child: FilledButton(
+                                          onPressed: () {
+                                            if (Get.isDialogOpen ?? false) {
+                                              Get.back<void>();
+                                            }
+                                          },
+                                          child: const Text('OK'),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                if (AppNotifier.isNetworkError(e)) {
+                                  await AppNotifier.showNetworkDialog(
+                                    title: 'Network error',
+                                    message:
+                                        'Unable to save. Check connection and retry.',
+                                    onRetry: () async {
+                                      await NetworkGuard.run(
+                                        onSubmit(
+                                          name: name,
+                                          studentId: studentId,
+                                          email: email,
+                                          contactNo: contactNo,
+                                          parentContact: parentContact,
+                                          gender: gender,
+                                          status: status,
+                                          batchId: batchId,
+                                          batchName: batchName,
+                                        ),
+                                      );
+                                    },
+                                  );
+                                } else {
+                                  AppNotifier.showError(
+                                    'Unable to Save Student',
+                                    message: AppNotifier.cleanMessage(e),
+                                  );
+                                }
+                              }
+                            } finally {
+                              if (context.mounted) {
+                                setState(() {
+                                  isSubmitting = false;
+                                });
+                              }
+                            }
+                          },
+                    icon: isSubmitting
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.check_rounded),
+                    label: Text(isSubmitting ? 'Saving...' : actionLabel),
                   ),
                 ],
-              );
-            },
+              ),
+            ],
+          );
+        },
       ),
     );
-
-    nameController.dispose();
-    studentIdController.dispose();
-    emailController.dispose();
-    contactNoController.dispose();
-    parentContactController.dispose();
+    // Do not dispose controllers here to avoid disposing while the dialog
+    // is still building/active. Dialog-scoped controllers are short-lived.
   }
 
   Future<void> _openViewDialog(
@@ -925,51 +952,139 @@ class StudentsView extends StatelessWidget {
     StudentsController controller,
     StudentModel student,
   ) async {
+    bool isDeleting = false;
     await _showSaasDialog(
       context: context,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          _dialogHeader(
-            icon: Icons.delete_outline_rounded,
-            title: 'Delete Student',
-            subtitle: 'This action is permanent and cannot be undone.',
-            accent: AppColors.error,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF5F5),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFF5D0D0)),
-            ),
-            child: Text(
-              'Delete ${student.name} (${student.email}) from students directory?',
-              style: const TextStyle(color: AppColors.textPrimary, height: 1.4),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Row(
+      child: StatefulBuilder(
+        builder: (BuildContext dialogContext, void Function(void Function()) setState) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              OutlinedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
+              _dialogHeader(
+                icon: Icons.delete_outline_rounded,
+                title: 'Delete Student',
+                subtitle: 'This action is permanent and cannot be undone.',
+                accent: AppColors.error,
               ),
-              const Spacer(),
-              FilledButton.icon(
-                onPressed: () async {
-                  await controller.deleteStudent(student.id);
-                  Navigator.of(context).pop();
-                },
-                style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-                icon: const Icon(Icons.delete_rounded),
-                label: const Text('Delete Student'),
+              const SizedBox(height: AppSpacing.md),
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF5F5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFF5D0D0)),
+                ),
+                child: Text(
+                  'Delete ${student.name} (${student.email}) from students directory?',
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                children: <Widget>[
+                  OutlinedButton(
+                    onPressed: isDeleting
+                        ? null
+                        : () => Navigator.of(dialogContext).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  const Spacer(),
+                  FilledButton.icon(
+                    onPressed: isDeleting
+                        ? null
+                        : () async {
+                            setState(() {
+                              isDeleting = true;
+                            });
+                            try {
+                              await NetworkGuard.run(
+                                controller.deleteStudent(student.id),
+                              );
+                              if (dialogContext.mounted) {
+                                Navigator.of(dialogContext).pop();
+                              }
+                              if (context.mounted) {
+                                await _showSaasDialog(
+                                  context: context,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: <Widget>[
+                                      _dialogHeader(
+                                        icon:
+                                            Icons.check_circle_outline_rounded,
+                                        title: 'Student Deleted',
+                                        subtitle:
+                                            'Student record deleted successfully.',
+                                        accent: AppColors.success,
+                                      ),
+                                      const SizedBox(height: AppSpacing.md),
+                                      Align(
+                                        alignment: Alignment.centerRight,
+                                        child: FilledButton(
+                                          onPressed: () {
+                                            if (Get.isDialogOpen ?? false) {
+                                              Get.back<void>();
+                                            }
+                                          },
+                                          child: const Text('OK'),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (!dialogContext.mounted) {
+                                return;
+                              }
+                              if (AppNotifier.isNetworkError(e)) {
+                                await AppNotifier.showNetworkDialog(
+                                  title: 'Network error',
+                                  message:
+                                      'Unable to delete student. Check connection and retry.',
+                                  onRetry: () async {
+                                    await NetworkGuard.run(
+                                      controller.deleteStudent(student.id),
+                                    );
+                                  },
+                                );
+                              } else {
+                                AppNotifier.showError(
+                                  'Unable to Delete Student',
+                                  message: AppNotifier.cleanMessage(e),
+                                );
+                              }
+                            } finally {
+                              if (dialogContext.mounted) {
+                                setState(() {
+                                  isDeleting = false;
+                                });
+                              }
+                            }
+                          },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.error,
+                    ),
+                    icon: isDeleting
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.delete_rounded),
+                    label: Text(isDeleting ? 'Deleting...' : 'Delete Student'),
+                  ),
+                ],
               ),
             ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }

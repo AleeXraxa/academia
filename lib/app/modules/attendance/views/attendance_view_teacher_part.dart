@@ -830,14 +830,12 @@ extension _AttendanceViewTeacherPart on AttendanceView {
                   ],
                 ),
                 const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
+                AppDropdownFormField<String>(
                   value: controller.historyBatchId.value.isEmpty
                       ? ''
                       : controller.historyBatchId.value,
-                  decoration: const InputDecoration(
-                    labelText: 'Batch',
-                    prefixIcon: Icon(Icons.class_rounded),
-                  ),
+                  labelText: 'Batch',
+                  prefixIcon: Icons.class_rounded,
                   items: <DropdownMenuItem<String>>[
                     const DropdownMenuItem<String>(
                       value: '',
@@ -846,7 +844,11 @@ extension _AttendanceViewTeacherPart on AttendanceView {
                     ...assignedBatches.map(
                       (BatchModel batch) => DropdownMenuItem<String>(
                         value: batch.id,
-                        child: Text(batch.name),
+                        child: Text(
+                          batch.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
                   ],
@@ -854,14 +856,12 @@ extension _AttendanceViewTeacherPart on AttendanceView {
                       controller.updateHistoryBatchId(value ?? ''),
                 ),
                 const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
+                AppDropdownFormField<String>(
                   value: controller.historyStatus.value.isEmpty
                       ? ''
                       : controller.historyStatus.value,
-                  decoration: const InputDecoration(
-                    labelText: 'Status',
-                    prefixIcon: Icon(Icons.flag_rounded),
-                  ),
+                  labelText: 'Status',
+                  prefixIcon: Icons.flag_rounded,
                   items: const <DropdownMenuItem<String>>[
                     DropdownMenuItem<String>(value: '', child: Text('All')),
                     DropdownMenuItem<String>(
@@ -1916,7 +1916,22 @@ extension _AttendanceViewTeacherPart on AttendanceView {
                                         'updatedAt':
                                             FieldValue.serverTimestamp(),
                                       }, SetOptions(merge: true));
-                                      await batch.commit();
+                                      await NetworkGuard.run(batch.commit());
+                                      await AuditLogService().log(
+                                        action: 'update',
+                                        entityType: 'teacher',
+                                        entityId: uid,
+                                        entityName: name,
+                                        meta: <String, dynamic>{
+                                          'email': normalizedEmail,
+                                          'expertise': expertiseController.text
+                                              .trim(),
+                                          'education': educationController.text
+                                              .trim(),
+                                          'experience': experienceController.text
+                                              .trim(),
+                                        },
+                                      );
 
                                       if (modalContext.mounted) {
                                         Navigator.of(modalContext).pop();
@@ -2171,3 +2186,4 @@ extension _AttendanceViewTeacherPart on AttendanceView {
   }
 
 }
+

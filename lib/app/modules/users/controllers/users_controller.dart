@@ -4,6 +4,7 @@ import 'package:academia/app/core/enums/user_role.dart';
 import 'package:academia/app/core/session/app_session.dart';
 import 'package:academia/app/data/models/user_model.dart';
 import 'package:academia/app/services/audit_log_service.dart';
+import 'package:academia/app/services/network_guard.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -81,11 +82,12 @@ class UsersController extends GetxController {
     _ensureRoleManagementAllowed(normalizedRole);
     final String normalizedEmail = email.trim().toLowerCase();
     final FirebaseAuth secondaryAuth = await _ensureSecondaryAuth();
-    final UserCredential credential = await secondaryAuth
-        .createUserWithEmailAndPassword(
-          email: normalizedEmail,
-          password: password,
-        );
+    final UserCredential credential = await NetworkGuard.run(
+      secondaryAuth.createUserWithEmailAndPassword(
+        email: normalizedEmail,
+        password: password,
+      ),
+    );
     final User? createdUser = credential.user;
     if (createdUser == null) {
       throw Exception('Unable to create auth account.');
@@ -116,18 +118,18 @@ class UsersController extends GetxController {
       });
     }
 
-    await batch.commit();
-    await _auditLogService.log(
-      action: 'create',
-      entityType: 'user',
-      entityId: createdUser.uid,
-      entityName: name.trim(),
-      meta: <String, dynamic>{
-        'role': normalizedRole,
-        'email': normalizedEmail,
-        'status': 'approved',
-      },
-    );
+    await NetworkGuard.run(batch.commit());
+    if (_isTeacherRole(normalizedRole)) {
+      await _auditLogService.log(
+        action: 'create',
+        entityType: 'teacher',
+        entityId: createdUser.uid,
+        entityName: name.trim(),
+        meta: <String, dynamic>{
+          'email': normalizedEmail,
+        },
+      );
+    }
   }
 
   Future<void> updateUser({
@@ -213,18 +215,19 @@ class UsersController extends GetxController {
       batch.delete(teacherDoc);
     }
 
-    await batch.commit();
-    await _auditLogService.log(
-      action: 'update',
-      entityType: 'user',
-      entityId: normalizedId,
-      entityName: name.trim(),
-      meta: <String, dynamic>{
-        'role': normalizedRole,
-        'status': storedStatus,
-        'email': email.trim().toLowerCase(),
-      },
-    );
+    await NetworkGuard.run(batch.commit());
+    if (_isTeacherRole(normalizedRole)) {
+      await _auditLogService.log(
+        action: 'update',
+        entityType: 'teacher',
+        entityId: normalizedId,
+        entityName: name.trim(),
+        meta: <String, dynamic>{
+          'email': email.trim().toLowerCase(),
+          'status': storedStatus,
+        },
+      );
+    }
     if (previousStatus != storedStatus) {
       final String statusAction = storedStatus == 'blocked' ? 'block' : 'unblock';
       await _auditLogService.log(
@@ -252,29 +255,36 @@ class UsersController extends GetxController {
     final Map<String, dynamic> userData =
         userSnapshot.data() ?? <String, dynamic>{};
 
-    await userDoc.update(<String, dynamic>{
-      'status': 'approved',
-      'approvedAt': FieldValue.serverTimestamp(),
-    });
+    await NetworkGuard.run(
+      userDoc.update(<String, dynamic>{
+        'status': 'approved',
+        'approvedAt': FieldValue.serverTimestamp(),
+      }),
+    );
 
     final DocumentSnapshot<Map<String, dynamic>> teacherSnapshot =
         await teacherDoc.get();
     if (teacherSnapshot.exists) {
-      await teacherDoc.update(<String, dynamic>{
-        'status': 'approved',
-        'approvedAt': FieldValue.serverTimestamp(),
-      });
+      await NetworkGuard.run(
+        teacherDoc.update(<String, dynamic>{
+          'status': 'approved',
+          'approvedAt': FieldValue.serverTimestamp(),
+        }),
+      );
     }
-    await _auditLogService.log(
-      action: 'approve',
-      entityType: 'user',
-      entityId: id.trim(),
-      entityName: (userData['name'] as String? ?? '').trim(),
-      meta: <String, dynamic>{
-        'email': (userData['email'] as String? ?? '').trim(),
-        'role': (userData['role'] as String? ?? '').trim(),
-      },
-    );
+    
+    final String approvedRole = (userData['role'] as String? ?? '').trim().toUpperCase();
+    if (approvedRole == 'TEACHER') {
+      await _auditLogService.log(
+        action: 'approve',
+        entityType: 'teacher',
+        entityId: id.trim(),
+        entityName: (userData['name'] as String? ?? '').trim(),
+        meta: <String, dynamic>{
+          'email': (userData['email'] as String? ?? '').trim(),
+        },
+      );
+    }
   }
 
   Future<void> rejectUser(String id) async {
@@ -289,29 +299,36 @@ class UsersController extends GetxController {
     final Map<String, dynamic> userData =
         userSnapshot.data() ?? <String, dynamic>{};
 
-    await userDoc.update(<String, dynamic>{
-      'status': 'rejected',
-      'rejectedAt': FieldValue.serverTimestamp(),
-    });
+    await NetworkGuard.run(
+      userDoc.update(<String, dynamic>{
+        'status': 'rejected',
+        'rejectedAt': FieldValue.serverTimestamp(),
+      }),
+    );
 
     final DocumentSnapshot<Map<String, dynamic>> teacherSnapshot =
         await teacherDoc.get();
     if (teacherSnapshot.exists) {
-      await teacherDoc.update(<String, dynamic>{
-        'status': 'rejected',
-        'rejectedAt': FieldValue.serverTimestamp(),
-      });
+      await NetworkGuard.run(
+        teacherDoc.update(<String, dynamic>{
+          'status': 'rejected',
+          'rejectedAt': FieldValue.serverTimestamp(),
+        }),
+      );
     }
-    await _auditLogService.log(
-      action: 'reject',
-      entityType: 'user',
-      entityId: id.trim(),
-      entityName: (userData['name'] as String? ?? '').trim(),
-      meta: <String, dynamic>{
-        'email': (userData['email'] as String? ?? '').trim(),
-        'role': (userData['role'] as String? ?? '').trim(),
-      },
-    );
+    
+    final String rejectedRole = (userData['role'] as String? ?? '').trim().toUpperCase();
+    if (rejectedRole == 'TEACHER') {
+      await _auditLogService.log(
+        action: 'reject',
+        entityType: 'teacher',
+        entityId: id.trim(),
+        entityName: (userData['name'] as String? ?? '').trim(),
+        meta: <String, dynamic>{
+          'email': (userData['email'] as String? ?? '').trim(),
+        },
+      );
+    }
   }
 
   Future<void> deleteUser({
@@ -360,7 +377,7 @@ class UsersController extends GetxController {
       if (targetUser == null) {
         throw Exception('Unable to verify auth account for deletion.');
       }
-      await targetUser.delete();
+      await NetworkGuard.run(targetUser.delete());
     } on FirebaseAuthException catch (e) {
       String message = 'Unable to delete auth account.';
       if (e.code == 'invalid-credential' ||
@@ -378,17 +395,18 @@ class UsersController extends GetxController {
     final WriteBatch batch = _firestore.batch();
     batch.delete(userDoc);
     batch.delete(teacherDoc);
-    await batch.commit();
-    await _auditLogService.log(
-      action: 'delete',
-      entityType: 'user',
-      entityId: normalizedId,
-      entityName: (userData['name'] as String? ?? '').trim(),
-      meta: <String, dynamic>{
-        'email': email,
-        'role': targetRole.toLowerCase(),
-      },
-    );
+    await NetworkGuard.run(batch.commit());
+    if (targetRole == 'TEACHER') {
+      await _auditLogService.log(
+        action: 'delete',
+        entityType: 'teacher',
+        entityId: normalizedId,
+        entityName: (userData['name'] as String? ?? '').trim(),
+        meta: <String, dynamic>{
+          'email': email,
+        },
+      );
+    }
   }
 
   bool _isTeacherRole(String role) {
@@ -484,3 +502,8 @@ class UsersController extends GetxController {
     super.onClose();
   }
 }
+
+
+
+
+

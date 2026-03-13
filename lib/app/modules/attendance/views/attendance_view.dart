@@ -5,9 +5,12 @@ import 'package:academia/app/data/models/student_model.dart';
 import 'package:academia/app/routes/app_routes.dart';
 import 'package:academia/app/theme/app_colors.dart';
 import 'package:academia/app/theme/app_spacing.dart';
+import 'package:academia/app/widgets/common/app_dropdown_form_field.dart';
 import 'package:academia/app/widgets/common/app_notifier.dart';
 import 'package:academia/app/widgets/common/app_page_scaffold.dart';
 import 'package:academia/app/widgets/layout/app_shell.dart';
+import 'package:academia/app/services/network_guard.dart';
+import 'package:academia/app/services/audit_log_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flashy_tab_bar2/flashy_tab_bar2.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -196,3 +199,4 @@ class _AttendanceSessionHeader extends StatelessWidget {
     );
   }
 }
+

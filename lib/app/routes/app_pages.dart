@@ -1,8 +1,8 @@
-import 'package:academia/app/core/enums/user_role.dart';
+﻿import 'package:academia/app/core/enums/user_role.dart';
 import 'package:academia/app/core/guards/role_guard.dart';
 import 'package:academia/app/core/session/app_session.dart';
 import 'package:academia/app/modules/attendance/views/attendance_view.dart';
-import 'package:academia/app/modules/audit_logs/views/audit_logs_view.dart';
+import 'audit_logs_view.dart';
 import 'package:academia/app/modules/auth/views/login_view.dart';
 import 'package:academia/app/modules/auth/views/register_view.dart';
 import 'package:academia/app/modules/batches/views/batches_view.dart';
@@ -22,14 +22,8 @@ class AppPages {
   static const String initial = AppRoutes.splash;
 
   static final List<GetPage<dynamic>> pages = <GetPage<dynamic>>[
-    GetPage<dynamic>(
-      name: AppRoutes.splash,
-      page: () => const SplashView(),
-    ),
-    GetPage<dynamic>(
-      name: AppRoutes.login,
-      page: () => const LoginView(),
-    ),
+    GetPage<dynamic>(name: AppRoutes.splash, page: () => const SplashView()),
+    GetPage<dynamic>(name: AppRoutes.login, page: () => const LoginView()),
     GetPage<dynamic>(
       name: AppRoutes.register,
       page: () => const RegisterView(),
@@ -141,3 +135,9 @@ class AppPages {
     return const LoginView();
   }
 }
+
+
+
+
+
+

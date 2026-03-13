@@ -5,6 +5,7 @@ import 'package:academia/app/core/session/app_session.dart';
 import 'package:academia/app/data/models/batch_model.dart';
 import 'package:academia/app/data/models/user_model.dart';
 import 'package:academia/app/services/audit_log_service.dart';
+import 'package:academia/app/services/network_guard.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
@@ -30,7 +31,7 @@ class BatchesController extends GetxController {
 
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _subscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
-      _approvedTeachersSubscription;
+  _approvedTeachersSubscription;
   static const int _pageStep = 20;
 
   int get totalBatches => batches.length;
@@ -63,7 +64,9 @@ class BatchesController extends GetxController {
     final String q = searchQuery.value.trim().toLowerCase();
     final String selectedStatus = statusFilter.value.trim().toLowerCase();
     final String selectedSemester = semesterFilter.value.trim().toLowerCase();
-    final String selectedCurriculam = curriculamFilter.value.trim().toLowerCase();
+    final String selectedCurriculam = curriculamFilter.value
+        .trim()
+        .toLowerCase();
     final String selectedTeacher = teacherFilter.value.trim();
 
     final List<BatchModel> filtered = batches.where((BatchModel batch) {
@@ -88,7 +91,8 @@ class BatchesController extends GetxController {
       final bool matchesCurriculam =
           selectedCurriculam.isEmpty || curriculam == selectedCurriculam;
       final bool matchesTeacher =
-          selectedTeacher.isEmpty || (batch.teacherId ?? '').trim() == selectedTeacher;
+          selectedTeacher.isEmpty ||
+          (batch.teacherId ?? '').trim() == selectedTeacher;
 
       return matchesSearch &&
           matchesStatus &&
@@ -100,7 +104,8 @@ class BatchesController extends GetxController {
     filtered.sort((BatchModel a, BatchModel b) {
       final bool asc = sortAscending.value;
       final String key = sortBy.value.trim().toLowerCase();
-      int compareText(String x, String y) => asc ? x.compareTo(y) : y.compareTo(x);
+      int compareText(String x, String y) =>
+          asc ? x.compareTo(y) : y.compareTo(x);
       int compareNum(num x, num y) => asc ? x.compareTo(y) : y.compareTo(x);
       switch (key) {
         case 'name':
@@ -152,24 +157,27 @@ class BatchesController extends GetxController {
         .collection('batches')
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .listen((QuerySnapshot<Map<String, dynamic>> snapshot) {
-          final List<BatchModel> mapped = snapshot.docs
-              .map(
-                (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
-                    BatchModel.fromMap(id: doc.id, map: doc.data()),
-              )
-              .toList();
+        .listen(
+          (QuerySnapshot<Map<String, dynamic>> snapshot) {
+            final List<BatchModel> mapped = snapshot.docs
+                .map(
+                  (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
+                      BatchModel.fromMap(id: doc.id, map: doc.data()),
+                )
+                .toList();
 
-          batches.assignAll(mapped);
-          errorText.value = '';
-          isLoading.value = false;
-          if (pageSize.value < _pageStep) {
-            resetPagination();
-          }
-        }, onError: (_) {
-          errorText.value = 'Failed to load batches from Firestore.';
-          isLoading.value = false;
-        });
+            batches.assignAll(mapped);
+            errorText.value = '';
+            isLoading.value = false;
+            if (pageSize.value < _pageStep) {
+              resetPagination();
+            }
+          },
+          onError: (_) {
+            errorText.value = 'Failed to load batches from Firestore.';
+            isLoading.value = false;
+          },
+        );
   }
 
   String teacherLabel(BatchModel batch) {
@@ -256,17 +264,20 @@ class BatchesController extends GetxController {
         .collection('teachers')
         .where('status', isEqualTo: 'approved')
         .snapshots()
-        .listen((QuerySnapshot<Map<String, dynamic>> snapshot) {
-          final List<UserModel> mapped = snapshot.docs
-              .map(
-                (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
-                    UserModel.fromMap(id: doc.id, map: doc.data()),
-              )
-              .toList();
-          approvedTeachers.assignAll(mapped);
-        }, onError: (_) {
-          approvedTeachers.clear();
-        });
+        .listen(
+          (QuerySnapshot<Map<String, dynamic>> snapshot) {
+            final List<UserModel> mapped = snapshot.docs
+                .map(
+                  (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
+                      UserModel.fromMap(id: doc.id, map: doc.data()),
+                )
+                .toList();
+            approvedTeachers.assignAll(mapped);
+          },
+          onError: (_) {
+            approvedTeachers.clear();
+          },
+        );
   }
 
   Future<void> createBatch({
@@ -303,22 +314,24 @@ class BatchesController extends GetxController {
     final DocumentReference<Map<String, dynamic>> batchDoc = _firestore
         .collection('batches')
         .doc();
-    await batchDoc.set(<String, dynamic>{
-      'name': name.trim(),
-      'nameLower': name.trim().toLowerCase(),
-      'semester': semester.trim(),
-      'curriculam': curriculam.trim(),
-      'days': normalizedDays,
-      'schedule': normalizedDays.join('-'),
-      'timing': timing.trim(),
-      'startDate': Timestamp.fromDate(startDate),
-      'teacherId': teacherId.trim(),
-      'teacherName': teacherName.trim(),
-      'status': 'active',
-      'studentsCount': 0,
-      'createdAt': FieldValue.serverTimestamp(),
-      'createdBy': (_auth.currentUser?.uid ?? '').trim(),
-    });
+    await NetworkGuard.run(
+      batchDoc.set(<String, dynamic>{
+        'name': name.trim(),
+        'nameLower': name.trim().toLowerCase(),
+        'semester': semester.trim(),
+        'curriculam': curriculam.trim(),
+        'days': normalizedDays,
+        'schedule': normalizedDays.join('-'),
+        'timing': timing.trim(),
+        'startDate': Timestamp.fromDate(startDate),
+        'teacherId': teacherId.trim(),
+        'teacherName': teacherName.trim(),
+        'status': 'active',
+        'studentsCount': 0,
+        'createdAt': FieldValue.serverTimestamp(),
+        'createdBy': (_auth.currentUser?.uid ?? '').trim(),
+      }),
+    );
     await _auditLogService.log(
       action: 'create',
       entityType: 'batch',
@@ -365,21 +378,23 @@ class BatchesController extends GetxController {
         .where((String day) => day.isNotEmpty)
         .toList();
 
-    await _firestore.collection('batches').doc(id).update(<String, dynamic>{
-      'name': name.trim(),
-      'nameLower': name.trim().toLowerCase(),
-      'semester': semester.trim(),
-      'curriculam': curriculam.trim(),
-      'days': normalizedDays,
-      'schedule': normalizedDays.join('-'),
-      'timing': timing.trim(),
-      'status': status.trim().toLowerCase(),
-      'teacherId': teacherId.trim(),
-      'teacherName': teacherName.trim(),
-      'updatedAt': FieldValue.serverTimestamp(),
-      'updatedBy': (_auth.currentUser?.uid ?? '').trim(),
-      if (changeNote.trim().isNotEmpty) 'updateNote': changeNote.trim(),
-    });
+    await NetworkGuard.run(
+      _firestore.collection('batches').doc(id).update(<String, dynamic>{
+        'name': name.trim(),
+        'nameLower': name.trim().toLowerCase(),
+        'semester': semester.trim(),
+        'curriculam': curriculam.trim(),
+        'days': normalizedDays,
+        'schedule': normalizedDays.join('-'),
+        'timing': timing.trim(),
+        'status': status.trim().toLowerCase(),
+        'teacherId': teacherId.trim(),
+        'teacherName': teacherName.trim(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'updatedBy': (_auth.currentUser?.uid ?? '').trim(),
+        if (changeNote.trim().isNotEmpty) 'updateNote': changeNote.trim(),
+      }),
+    );
     await _auditLogService.log(
       action: 'update',
       entityType: 'batch',
@@ -414,8 +429,8 @@ class BatchesController extends GetxController {
     final DocumentReference<Map<String, dynamic>> batchDoc = _firestore
         .collection('batches')
         .doc(normalizedId);
-    final DocumentSnapshot<Map<String, dynamic>> batchSnapshot =
-        await batchDoc.get();
+    final DocumentSnapshot<Map<String, dynamic>> batchSnapshot = await batchDoc
+        .get();
     if (!batchSnapshot.exists) {
       return const BatchDeleteResult(
         success: false,
@@ -455,7 +470,7 @@ class BatchesController extends GetxController {
       entityId: normalizedId,
       entityName: batchName.trim(),
     );
-    await batchDoc.delete();
+    await NetworkGuard.run(batchDoc.delete());
     return const BatchDeleteResult(success: true, message: 'Batch deleted.');
   }
 
@@ -494,7 +509,8 @@ class BatchesController extends GetxController {
         .where('nameLower', isEqualTo: lower)
         .limit(3)
         .get();
-    for (final QueryDocumentSnapshot<Map<String, dynamic>> doc in existing.docs) {
+    for (final QueryDocumentSnapshot<Map<String, dynamic>> doc
+        in existing.docs) {
       if (editingId != null && doc.id == editingId.trim()) {
         continue;
       }
@@ -509,15 +525,15 @@ class BatchesController extends GetxController {
         .where('batchId', isEqualTo: batchId.trim())
         .limit(120)
         .get();
-    return snapshot.docs
-        .map((QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-          final String name = (doc.data()['name'] as String?)?.trim() ?? '';
-          return name.isEmpty ? doc.id : name;
-        })
-        .toList();
+    return snapshot.docs.map((QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+      final String name = (doc.data()['name'] as String?)?.trim() ?? '';
+      return name.isEmpty ? doc.id : name;
+    }).toList();
   }
 
-  Future<List<BatchSessionLite>> fetchBatchRecentSessions(String batchId) async {
+  Future<List<BatchSessionLite>> fetchBatchRecentSessions(
+    String batchId,
+  ) async {
     final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
         .collection('attendance_sessions')
         .where('batchId', isEqualTo: batchId.trim())

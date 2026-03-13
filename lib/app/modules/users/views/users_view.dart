@@ -3,8 +3,11 @@ import 'package:academia/app/modules/users/controllers/users_controller.dart';
 import 'package:academia/app/routes/app_routes.dart';
 import 'package:academia/app/theme/app_colors.dart';
 import 'package:academia/app/theme/app_spacing.dart';
+import 'package:academia/app/widgets/common/app_dropdown_form_field.dart';
+import 'package:academia/app/widgets/common/app_notifier.dart';
 import 'package:academia/app/widgets/common/app_page_scaffold.dart';
 import 'package:academia/app/widgets/layout/app_shell.dart';
+import 'package:academia/app/services/network_guard.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -657,12 +660,11 @@ class UsersView extends StatelessWidget {
                     ),
                     const SizedBox(height: AppSpacing.sm),
                   ],
-                  DropdownButtonFormField<String>(
+                  AppDropdownFormField<String>(
+                    labelText: 'Role',
+                    prefixIcon: Icons.badge_outlined,
                     value: selectedRole,
-                    decoration: const InputDecoration(
-                      labelText: 'Role',
-                      prefixIcon: Icon(Icons.badge_outlined),
-                    ),
+                    enabled: !roleLocked,
                     items: roleOptions
                         .map(
                           (String role) => DropdownMenuItem<String>(
@@ -671,25 +673,21 @@ class UsersView extends StatelessWidget {
                           ),
                         )
                         .toList(),
-                    onChanged: roleLocked
-                        ? null
-                        : (String? value) {
-                            if (value == null) {
-                              return;
-                            }
-                            setState(() {
-                              selectedRole = value;
-                            });
-                          },
+                    onChanged: (String? value) {
+                      if (value == null) {
+                        return;
+                      }
+                      setState(() {
+                        selectedRole = value;
+                      });
+                    },
                   ),
                   if (!includePassword) ...<Widget>[
                     const SizedBox(height: AppSpacing.sm),
-                    DropdownButtonFormField<String>(
+                    AppDropdownFormField<String>(
+                      labelText: 'Status',
+                      prefixIcon: Icons.flag_rounded,
                       value: selectedStatus,
-                      decoration: const InputDecoration(
-                        labelText: 'Status',
-                        prefixIcon: Icon(Icons.flag_rounded),
-                      ),
                       items: statusOptions
                           .map(
                             (String status) => DropdownMenuItem<String>(
@@ -756,18 +754,42 @@ class UsersView extends StatelessWidget {
                           }
 
                           try {
-                            await onSubmit(
-                              name: name,
-                              email: email,
-                              role: selectedRole,
-                              status: includePassword ? 'Active' : selectedStatus,
-                              password: includePassword ? password : null,
+                            await NetworkGuard.run(
+                              onSubmit(
+                                name: name,
+                                email: email,
+                                role: selectedRole,
+                                status:
+                                    includePassword ? 'Active' : selectedStatus,
+                                password: includePassword ? password : null,
+                              ),
                             );
                             if (context.mounted) {
                               Navigator.of(context).pop();
                             }
                           } catch (e) {
                             if (!context.mounted) {
+                              return;
+                            }
+                            if (AppNotifier.isNetworkError(e)) {
+                              await AppNotifier.showNetworkDialog(
+                                title: 'Network error',
+                                message:
+                                    'Unable to sync user data. Check connection and retry.',
+                                onRetry: () async {
+                                  await NetworkGuard.run(
+                                    onSubmit(
+                                      name: name,
+                                      email: email,
+                                      role: selectedRole,
+                                      status: includePassword
+                                          ? 'Active'
+                                          : selectedStatus,
+                                      password: includePassword ? password : null,
+                                    ),
+                                  );
+                                },
+                              );
                               return;
                             }
                             await _showSaasDialog(
@@ -950,15 +972,33 @@ class UsersView extends StatelessWidget {
                               errorText = null;
                             });
                             try {
-                              await controller.deleteUser(
-                                id: user.id,
-                                password: password,
+                              await NetworkGuard.run(
+                                controller.deleteUser(
+                                  id: user.id,
+                                  password: password,
+                                ),
                               );
                               if (dialogContext.mounted) {
                                 Navigator.of(dialogContext).pop();
                               }
                             } catch (e) {
                               if (!dialogContext.mounted) {
+                                return;
+                              }
+                              if (AppNotifier.isNetworkError(e)) {
+                                await AppNotifier.showNetworkDialog(
+                                  title: 'Network error',
+                                  message:
+                                      'Unable to delete user. Check connection and retry.',
+                                  onRetry: () async {
+                                    await NetworkGuard.run(
+                                      controller.deleteUser(
+                                        id: user.id,
+                                        password: password,
+                                      ),
+                                    );
+                                  },
+                                );
                                 return;
                               }
                               setState(() {

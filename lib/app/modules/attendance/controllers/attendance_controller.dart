@@ -54,6 +54,7 @@ class AttendanceController extends GetxController {
   final RxMap<String, QueuedTeacherSubmission> queuedTeacherSubmissions =
       <String, QueuedTeacherSubmission>{}.obs;
   final RxBool requireCorrectionNote = true.obs;
+  final RxBool lockSubmittedSessions = true.obs;
 
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _batchesSubscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _todaySubscription;
@@ -708,17 +709,13 @@ class AttendanceController extends GetxController {
     if (batchId.isEmpty || batchName.isEmpty) {
       throw Exception('Select a batch first.');
     }
+    final String docId = '${todayKey}_$batchId';
     if (presentCount < 0) {
       throw Exception('Present count cannot be negative.');
     }
 
     isSaving.value = true;
     try {
-      final String docId = _sessionDocIdForBatch(
-        dateKey: todayKey,
-        batchId: batchId,
-        batchName: batchName,
-      );
       final DocumentSnapshot<Map<String, dynamic>> existing =
           await _attendanceService.getSession(docId);
       if (existing.exists) {
@@ -784,193 +781,98 @@ class AttendanceController extends GetxController {
   }
 
   Future<void> saveTodayAttendanceForSelectedBatches() async {
-    final List<BatchModel> todayBatches = generationCandidateBatches;
-    final List<String> selectedIds = selectedGenerationBatchIds
-        .map((String id) => id.trim())
-        .where((String id) => id.isNotEmpty)
-        .toList();
-
-    if (todayBatches.isEmpty) {
-      throw Exception('No batches are scheduled for today.');
+    if (selectedGenerationBatchIds.isEmpty) {
+      throw Exception('Select at least one batch to generate sessions.');
     }
-    if (selectedIds.isEmpty) {
-      throw Exception('Select at least one batch to generate session.');
-    }
-
+    final DateTime today = DateTime.now();
+    final String dateKey = todayKey;
     final Map<String, BatchModel> byId = <String, BatchModel>{
-      for (final BatchModel batch in todayBatches) batch.id: batch,
+      for (final BatchModel batch in batches) batch.id: batch,
     };
-
-    isSaving.value = true;
-    try {
-      for (final String batchId in selectedIds) {
-        final BatchModel? batch = byId[batchId];
-        if (batch == null) {
-          throw Exception('Selected batch is not scheduled for today.');
-        }
-        final String rawInput = (generationPresentByBatchId[batchId] ?? '')
-            .trim();
-        final int? presentCount = int.tryParse(rawInput);
-        if (presentCount == null) {
-          throw Exception('Enter valid present count for ${batch.name}.');
-        }
-        if (presentCount < 0) {
-          throw Exception(
-            'Present count cannot be negative for ${batch.name}.',
-          );
-        }
-        final int totalStudents = batch.studentsCount ?? 0;
-        if (totalStudents <= 0) {
-          throw Exception(
-            'Cannot generate session for ${batch.name} because this batch has 0 students. Please assign students first.',
-          );
-        }
-        if (presentCount > totalStudents) {
-          throw Exception(
-            'Present count cannot exceed batch size ($totalStudents) for ${batch.name}.',
-          );
-        }
-      }
-
-      for (final String batchId in selectedIds) {
-        final BatchModel batch = byId[batchId]!;
-        final String docId = _sessionDocIdForBatch(
-          dateKey: todayKey,
-          batchId: batchId,
-          batchName: batch.name,
+    final List<String> selectedIds = selectedGenerationBatchIds.toList();
+    for (final String batchId in selectedIds) {
+      final BatchModel batch = byId[batchId]!;
+      final int totalStudents = batch.studentsCount ?? 0;
+      final String rawInput = (generationPresentByBatchId[batchId] ?? '')
+          .trim();
+      final int presentCount = rawInput.isEmpty
+          ? totalStudents
+          : int.tryParse(rawInput) ?? -1;
+      if (totalStudents <= 0) {
+        throw Exception(
+          'Batch "${batch.name}" has no students yet. Please assign students first.',
         );
-        final DocumentSnapshot<Map<String, dynamic>> existing =
-            await _attendanceService.getSession(docId);
-        if (existing.exists) {
-          throw Exception(
-            'Session already generated for the ${batch.name} batch',
-          );
-        }
       }
-
-      final Map<String, Map<String, dynamic>> sessionsPayload =
-          <String, Map<String, dynamic>>{};
-      for (final String batchId in selectedIds) {
-        final BatchModel batch = byId[batchId]!;
-        final int totalStudents = batch.studentsCount ?? 0;
-        final int presentCount = int.parse(
-          (generationPresentByBatchId[batchId] ?? '0').trim(),
+      if (presentCount < 0) {
+        throw Exception('Enter a valid present count for ${batch.name}.');
+      }
+      if (presentCount > totalStudents) {
+        throw Exception(
+          'Present count cannot exceed total students for ${batch.name}.',
         );
-        final int absentCount = (totalStudents - presentCount).clamp(
+      }
+    }
+
+    final Map<String, Map<String, dynamic>> sessionsPayload =
+        <String, Map<String, dynamic>>{};
+    final bool isExtraMode = generationMode.value == 'extra';
+    for (final String batchId in selectedIds) {
+      final BatchModel batch = byId[batchId]!;
+      final int totalStudents = batch.studentsCount ?? 0;
+      final String rawInput = (generationPresentByBatchId[batchId] ?? '')
+          .trim();
+      final int presentCount = rawInput.isEmpty
+          ? totalStudents
+          : int.tryParse(rawInput) ?? totalStudents;
+      final int leaveCount = 0;
+      final bool classConducted = generationConductedByBatchId[batchId] ?? true;
+      final String docId = '${dateKey}_$batchId${isExtraMode ? '_extra' : ''}';
+
+      sessionsPayload[docId] = <String, dynamic>{
+        'id': docId,
+        'dateKey': dateKey,
+        'date': Timestamp.fromDate(
+          DateTime(today.year, today.month, today.day),
+        ),
+        'batchId': batchId,
+        'batchName': batch.name,
+        'teacherId': batch.teacherId,
+        'teacherName': batch.teacherName,
+        'presentCount': presentCount,
+        'leaveCount': leaveCount,
+        'absentCount': (totalStudents - presentCount - leaveCount).clamp(
           0,
-          1000000,
-        );
-        final bool classConducted =
-            generationConductedByBatchId[batchId] ?? true;
-        final String docId = _sessionDocIdForBatch(
-          dateKey: todayKey,
-          batchId: batchId,
-          batchName: batch.name,
-        );
-        sessionsPayload[docId] = <String, dynamic>{
-          'dateKey': todayKey,
-          'date': Timestamp.fromDate(
-            DateTime(
-              DateTime.now().year,
-              DateTime.now().month,
-              DateTime.now().day,
-            ),
-          ),
-          'batchId': batchId,
-          'batchName': batch.name,
-          'totalStudents': totalStudents,
-          'presentCount': presentCount,
-          'leaveCount': 0,
-          'absentCount': absentCount,
-          'classConducted': classConducted,
-          if (!classConducted) ...<String, dynamic>{
-            'notConductedBy': _auth.currentUser?.uid ?? '',
-            'notConductedRole': Get.find<AppSession>().roleOrStaff.name,
-            'notConductedAt': FieldValue.serverTimestamp(),
-          },
-          'status': 'open',
-          'updatedAt': FieldValue.serverTimestamp(),
-          'createdAt': FieldValue.serverTimestamp(),
-        };
-      }
-
-      await _attendanceService.batchSetSessions(sessionsPayload);
-      for (final String batchId in selectedIds) {
-        final BatchModel batch = byId[batchId]!;
-        final String docId = _sessionDocIdForBatch(
-          dateKey: todayKey,
-          batchId: batchId,
-          batchName: batch.name,
-        );
-        final int totalStudents = batch.studentsCount ?? 0;
-        final int presentCount = int.parse(
-          (generationPresentByBatchId[batchId] ?? '0').trim(),
-        );
-        final int absentCount = (totalStudents - presentCount).clamp(
-          0,
-          1000000,
-        );
-        final bool classConducted =
-            generationConductedByBatchId[batchId] ?? true;
-        await _auditLogService.log(
-          action: 'generate',
-          entityType: 'session',
-          entityId: docId,
-          entityName: batch.name,
-          meta: <String, dynamic>{
-            'dateKey': todayKey,
-            'mode': generationMode.value,
-            'presentCount': presentCount,
-            'absentCount': absentCount,
-            'totalStudents': totalStudents,
-            'classConducted': classConducted,
-          },
-        );
-      }
-      closeMarkForm();
-      errorText.value = '';
-    } finally {
-      isSaving.value = false;
+          totalStudents,
+        ),
+        'totalStudents': totalStudents,
+        'status': 'open',
+        'presentStudentIds': <String>[],
+        'leaveStudentIds': <String>[],
+        'absentStudentIds': <String>[],
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'isExtraSession': isExtraMode,
+        'classConducted': classConducted,
+      };
     }
-  }
 
-  String _sessionDocIdForBatch({
-    required String dateKey,
-    required String batchId,
-    required String batchName,
-  }) {
-    final String normalizedDate = dateKey.trim();
-    final String normalizedBatchName = _slug(batchName);
-    if (normalizedBatchName.isNotEmpty) {
-      return '${normalizedDate}_$normalizedBatchName';
+    await _attendanceService.batchSetSessions(sessionsPayload);
+    for (final String batchId in selectedIds) {
+      final BatchModel batch = byId[batchId]!;
+      await _auditLogService.log(
+        action: 'generate',
+        entityType: 'session',
+        entityId: '${dateKey}_$batchId${isExtraMode ? '_extra' : ''}',
+        entityName: batch.name,
+        meta: <String, dynamic>{
+          'dateKey': dateKey,
+          'isExtraSession': isExtraMode,
+        },
+      );
     }
-    return '${normalizedDate}_${_slug(batchId)}';
-  }
 
-  String _slug(String input) {
-    final String lower = input.trim().toLowerCase();
-    if (lower.isEmpty) {
-      return '';
-    }
-    final String cleaned = lower.replaceAll(RegExp(r'[^a-z0-9]+'), '_');
-    return cleaned.replaceAll(RegExp(r'^_+|_+$'), '');
-  }
-
-  Future<List<StudentModel>> fetchStudentsForBatch(String batchId) async {
-    final List<StudentModel> all =
-        await _attendanceService.fetchStudentsForBatch(batchId);
-    return all
-        .where(
-          (StudentModel student) =>
-              student.status.trim().toLowerCase() == 'active',
-        )
-        .toList();
-  }
-
-  Future<Map<String, String>> fetchStudentNamesByIds(
-    List<String> studentIds,
-  ) async {
-    return _attendanceService.fetchStudentNamesByIds(studentIds);
+    closeMarkForm();
+    errorText.value = '';
   }
 
   Future<void> submitTeacherAttendance({
@@ -1081,6 +983,27 @@ class AttendanceController extends GetxController {
     final int computedAbsentCount = (totalStudents - presentCount - leaveCount)
         .clamp(0, 1000000);
 
+    final String actorEmail = (_auth.currentUser?.email ?? '').trim();
+    final Map<String, dynamic> submitAudit = <String, dynamic>{
+      'action': 'submit',
+      'entityType': 'attendance',
+      'entityId': sessionId,
+      'entityName': (sessionMap['batchName'] as String? ?? '').trim(),
+      'actorId': uid,
+      'actorEmail': actorEmail,
+      'actorName': '',
+      'actorRole': Get.find<AppSession>().roleOrStaff.name,
+      'note': classConducted ? '' : trimmedReason,
+      'meta': <String, dynamic>{
+        'dateKey': (sessionMap['dateKey'] as String? ?? '').trim(),
+        'presentCount': presentCount,
+        'leaveCount': leaveCount,
+        'absentCount': computedAbsentCount,
+        'classConducted': classConducted,
+      },
+      'at': Timestamp.now(),
+    };
+
     await _attendanceService.updateSession(
       sessionId: sessionId,
       data: <String, dynamic>{
@@ -1096,6 +1019,7 @@ class AttendanceController extends GetxController {
         'teacherMarkedAt': FieldValue.serverTimestamp(),
         'teacherSubmitted': true,
         'status': 'submitted_by_teacher',
+        'auditLogs': FieldValue.arrayUnion(<Map<String, dynamic>>[submitAudit]),
         if (!classConducted) ...<String, dynamic>{
           'notConductedTeacherReason': trimmedReason,
           'notConductedTeacherBy': uid,
@@ -1131,6 +1055,14 @@ class AttendanceController extends GetxController {
       return value;
     }
     return int.tryParse('$value') ?? 0;
+  }
+
+  Future<List<StudentModel>> fetchStudentsForBatch(String batchId) {
+    return _attendanceService.fetchStudentsForBatch(batchId);
+  }
+
+  Future<Map<String, String>> fetchStudentNamesByIds(List<String> ids) {
+    return _attendanceService.fetchStudentNamesByIds(ids);
   }
 
   Future<void> adminCorrectSession({
@@ -1256,10 +1188,13 @@ class AttendanceController extends GetxController {
           (DocumentSnapshot<Map<String, dynamic>> snapshot) {
             final Map<String, dynamic> map =
                 snapshot.data() ?? <String, dynamic>{};
+            lockSubmittedSessions.value =
+                (map['lockSubmittedSessions'] as bool?) ?? true;
             requireCorrectionNote.value =
                 (map['requireCorrectionNote'] as bool?) ?? true;
           },
           onError: (_) {
+            lockSubmittedSessions.value = true;
             requireCorrectionNote.value = true;
           },
         );

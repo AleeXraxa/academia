@@ -2,6 +2,7 @@ import 'package:academia/app/modules/settings/controllers/settings_controller.da
 import 'package:academia/app/routes/app_routes.dart';
 import 'package:academia/app/theme/app_colors.dart';
 import 'package:academia/app/theme/app_spacing.dart';
+import 'package:academia/app/widgets/common/app_dropdown_form_field.dart';
 import 'package:academia/app/widgets/common/app_page_scaffold.dart';
 import 'package:academia/app/widgets/layout/app_shell.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +19,7 @@ class _SettingsViewState extends State<SettingsView> {
   late final SettingsController _controller;
   late final TextEditingController _instituteController;
   late final TextEditingController _supportController;
+  bool _hasChanges = false;
   String? _instituteError;
   String? _supportError;
 
@@ -219,6 +221,7 @@ class _SettingsViewState extends State<SettingsView> {
                   _instituteError = null;
                 });
               }
+              _markDirty();
             },
             decoration: const InputDecoration(
               labelText: 'Institute Name',
@@ -234,6 +237,7 @@ class _SettingsViewState extends State<SettingsView> {
                   _supportError = null;
                 });
               }
+              _markDirty();
             },
             decoration: const InputDecoration(
               labelText: 'Support Email',
@@ -241,12 +245,10 @@ class _SettingsViewState extends State<SettingsView> {
             ).copyWith(errorText: _supportError),
           ),
           const SizedBox(height: AppSpacing.sm),
-          DropdownButtonFormField<int>(
+          AppDropdownFormField<int>(
             value: _controller.defaultHistoryDays.value,
-            decoration: const InputDecoration(
-              labelText: 'Default History Range',
-              prefixIcon: Icon(Icons.history_rounded),
-            ),
+            labelText: 'Default History Range',
+            prefixIcon: Icons.history_rounded,
             items: const <DropdownMenuItem<int>>[
               DropdownMenuItem<int>(value: 7, child: Text('Last 7 days')),
               DropdownMenuItem<int>(value: 30, child: Text('Last 30 days')),
@@ -255,6 +257,7 @@ class _SettingsViewState extends State<SettingsView> {
             onChanged: (int? value) {
               if (value != null) {
                 _controller.defaultHistoryDays.value = value;
+                _markDirty();
               }
             },
           ),
@@ -274,7 +277,10 @@ class _SettingsViewState extends State<SettingsView> {
             title: 'Lock submitted sessions',
             subtitle: 'Prevent edits once teacher submits attendance.',
             value: _controller.lockSubmittedSessions.value,
-            onChanged: _controller.toggleLockSubmittedSessions,
+            onChanged: (bool value) {
+              _controller.toggleLockSubmittedSessions(value);
+              _markDirty();
+            },
             icon: Icons.lock_clock_rounded,
           ),
           const SizedBox(height: 10),
@@ -282,7 +288,10 @@ class _SettingsViewState extends State<SettingsView> {
             title: 'Require correction note',
             subtitle: 'Admin/CAH must mention reason for correction.',
             value: _controller.requireCorrectionNote.value,
-            onChanged: _controller.toggleRequireCorrectionNote,
+            onChanged: (bool value) {
+              _controller.toggleRequireCorrectionNote(value);
+              _markDirty();
+            },
             icon: Icons.note_alt_rounded,
           ),
           const SizedBox(height: 10),
@@ -290,7 +299,10 @@ class _SettingsViewState extends State<SettingsView> {
             title: 'Include leave in attendance %',
             subtitle: 'Leave students are counted in attendance percentage.',
             value: _controller.includeLeaveInAttendance.value,
-            onChanged: _controller.toggleIncludeLeaveInAttendance,
+            onChanged: (bool value) {
+              _controller.toggleIncludeLeaveInAttendance(value);
+              _markDirty();
+            },
             icon: Icons.percent_rounded,
           ),
         ],
@@ -299,159 +311,87 @@ class _SettingsViewState extends State<SettingsView> {
   }
 
   Widget _saveRow(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: FilledButton.icon(
-        onPressed: _controller.isSaving.value
-            ? null
-            : () async {
-                final String instituteName = _instituteController.text.trim();
-                final String supportEmail = _supportController.text.trim();
-                String? instituteError;
-                String? supportError;
-                if (instituteName.isEmpty) {
-                  instituteError = 'Institute name is required.';
-                }
-                if (supportEmail.isNotEmpty &&
-                    !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(supportEmail)) {
-                  supportError = 'Enter a valid email address.';
-                }
-                if (instituteError != null || supportError != null) {
-                  setState(() {
-                    _instituteError = instituteError;
-                    _supportError = supportError;
-                  });
-                  return;
-                }
-                await _controller.saveSettings(
-                  instituteNameValue: instituteName,
-                  supportEmailValue: supportEmail,
-                  historyDays: _controller.defaultHistoryDays.value,
-                );
-                if (context.mounted) {
-                  await showGeneralDialog<void>(
-                    context: context,
-                    barrierDismissible: true,
-                    barrierLabel: 'settings_saved',
-                    barrierColor: Colors.black.withValues(alpha: 0.24),
-                    transitionDuration: const Duration(milliseconds: 220),
-                    pageBuilder:
-                        (
-                          BuildContext dialogContext,
-                          Animation<double> _,
-                          Animation<double> __,
-                        ) {
-                      return Center(
-                        child: Material(
-                          color: Colors.transparent,
-                          child: Container(
-                            width: 420,
-                            margin: const EdgeInsets.symmetric(horizontal: 24),
-                            padding: const EdgeInsets.all(18),
-                            decoration: BoxDecoration(
-                              color: AppColors.surface,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: AppColors.border),
-                              boxShadow: const <BoxShadow>[
-                                BoxShadow(
-                                  color: Color(0x220F172A),
-                                  blurRadius: 28,
-                                  offset: Offset(0, 12),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                Row(
-                                  children: <Widget>[
-                                    Container(
-                                      width: 38,
-                                      height: 38,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFDCFCE7),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: const Icon(
-                                        Icons.check_circle_rounded,
-                                        color: Color(0xFF166534),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    const Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: <Widget>[
-                                          Text(
-                                            'Settings Updated',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 17,
-                                            ),
-                                          ),
-                                          SizedBox(height: 2),
-                                          Text(
-                                            'Configuration has been saved successfully.',
-                                            style: TextStyle(
-                                              color: AppColors.textSecondary,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: AppSpacing.md),
-                                Align(
-                                  alignment: Alignment.centerRight,
-                                  child: FilledButton(
-                                    onPressed: () =>
-                                        Navigator.of(dialogContext).pop(),
-                                    child: const Text('Done'),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                    transitionBuilder:
-                        (
-                          BuildContext _,
-                          Animation<double> animation,
-                          Animation<double> __,
-                          Widget child,
-                        ) {
-                      final Animation<double> curve = CurvedAnimation(
-                        parent: animation,
-                        curve: Curves.easeOutCubic,
-                      );
-                      return FadeTransition(
-                        opacity: curve,
-                        child: ScaleTransition(
-                          scale: Tween<double>(
-                            begin: 0.98,
-                            end: 1,
-                          ).animate(curve),
-                          child: child,
-                        ),
-                      );
-                    },
+    return Row(
+      children: <Widget>[
+        if (_hasChanges)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F8FF),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: const Color(0xFFE4EAF7)),
+            ),
+            child: const Text(
+              'Unsaved changes',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        const Spacer(),
+        FilledButton.icon(
+          onPressed: (_controller.isSaving.value || !_hasChanges)
+              ? null
+              : () async {
+                  final String instituteName =
+                      _instituteController.text.trim();
+                  final String supportEmail = _supportController.text.trim();
+                  String? instituteError;
+                  String? supportError;
+                  if (instituteName.isEmpty) {
+                    instituteError = 'Institute name is required.';
+                  }
+                  if (supportEmail.isNotEmpty &&
+                      !RegExp(r'^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
+                          .hasMatch(supportEmail)) {
+                    supportError = 'Enter a valid email address.';
+                  }
+                  if (instituteError != null || supportError != null) {
+                    setState(() {
+                      _instituteError = instituteError;
+                      _supportError = supportError;
+                    });
+                    return;
+                  }
+                  await _controller.saveSettings(
+                    instituteNameValue: instituteName,
+                    supportEmailValue: supportEmail,
+                    historyDays: _controller.defaultHistoryDays.value,
                   );
-                }
-              },
-        icon: _controller.isSaving.value
-            ? const SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(Icons.save_rounded),
-        label: Text(_controller.isSaving.value ? 'Saving...' : 'Save Settings'),
-      ),
+                  setState(() {
+                    _hasChanges = false;
+                  });
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Settings saved successfully.'),
+                      ),
+                    );
+                  }
+                },
+          icon: _controller.isSaving.value
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.save_rounded),
+          label: Text(
+            _controller.isSaving.value ? 'Saving...' : 'Save Settings',
+          ),
+        ),
+      ],
     );
+  }
+
+  void _markDirty() {
+    if (!_hasChanges) {
+      setState(() {
+        _hasChanges = true;
+      });
+    }
   }
 
   Widget _snapshotCard() {

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:academia/app/data/models/batch_model.dart';
 import 'package:academia/app/data/models/student_model.dart';
 import 'package:academia/app/services/audit_log_service.dart';
+import 'package:academia/app/services/network_guard.dart';
+import 'package:academia/app/widgets/common/app_notifier.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
 
@@ -132,7 +134,17 @@ class StudentsController extends GetxController {
     }
 
     if (hasChanges) {
-      await writer.commit();
+      try {
+        await NetworkGuard.run(writer.commit());
+      } catch (e) {
+        if (AppNotifier.isNetworkError(e)) {
+          await AppNotifier.showNetworkDialog(
+            title: 'Network error',
+            message:
+                'Unable to sync batch counts. Check connection and retry later.',
+          );
+        }
+      }
     }
   }
 
@@ -178,7 +190,7 @@ class StudentsController extends GetxController {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     }
-    await batch.commit();
+    await NetworkGuard.run(batch.commit());
     await _auditLogService.log(
       action: 'create',
       entityType: 'student',
@@ -305,8 +317,9 @@ class StudentsController extends GetxController {
           gender: genderNormalized,
           status: statusNormalized,
           batchId: statusNormalized == 'active' ? (matchedBatch?.id ?? '') : '',
-          batchName:
-              statusNormalized == 'active' ? (matchedBatch?.name ?? '') : '',
+          batchName: statusNormalized == 'active'
+              ? (matchedBatch?.name ?? '')
+              : '',
           errors: errors,
         ),
       );
@@ -437,7 +450,7 @@ class StudentsController extends GetxController {
       }
 
       try {
-        await writeBatch.commit();
+        await NetworkGuard.run(writeBatch.commit());
         imported += chunk.length;
       } catch (e) {
         failed.add('Rows ${chunk.first.rowNumber}-${chunk.last.rowNumber}: $e');
@@ -611,7 +624,7 @@ class StudentsController extends GetxController {
       });
     }
 
-    await batch.commit();
+    await NetworkGuard.run(batch.commit());
     await _auditLogService.log(
       action: 'update',
       entityType: 'student',
@@ -689,7 +702,7 @@ class StudentsController extends GetxController {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     }
-    await batch.commit();
+    await NetworkGuard.run(batch.commit());
     await _auditLogService.log(
       action: 'delete',
       entityType: 'student',

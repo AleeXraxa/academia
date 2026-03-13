@@ -2,6 +2,7 @@ import 'package:academia/app/modules/reports/controllers/reports_controller.dart
 import 'package:academia/app/routes/app_routes.dart';
 import 'package:academia/app/theme/app_colors.dart';
 import 'package:academia/app/theme/app_spacing.dart';
+import 'package:academia/app/widgets/common/app_dropdown_form_field.dart';
 import 'package:academia/app/widgets/common/app_page_scaffold.dart';
 import 'package:academia/app/widgets/layout/app_shell.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +24,9 @@ class _ReportsViewState extends State<ReportsView> {
   String _selectedTeacherId = '';
   String _selectedEntityLabel = '';
   int _selectedRangeDays = 30;
+  int _comparativeRangeDays = 30;
+  int _exceptionsRangeDays = 30;
+  int _healthRangeDays = 30;
   String _inlineError = '';
   late DateTime _selectedMonth;
   late final List<DateTime> _monthOptions;
@@ -33,6 +37,12 @@ class _ReportsViewState extends State<ReportsView> {
   List<ReportSession> _reportSessions = <ReportSession>[];
   String _reportTitle = '';
   String _reportSubtitle = '';
+
+  int _studentScheduled = 0;
+  int _studentPresent = 0;
+  int _studentLeave = 0;
+  int _studentAbsent = 0;
+  double _studentAttendancePct = 0;
 
   @override
   void initState() {
@@ -415,10 +425,10 @@ class _ReportsViewState extends State<ReportsView> {
   }
 
   Widget _reportTypeField() {
-    return _dropdownField<ReportType>(
+    return AppDropdownFormField<ReportType>(
       value: _selectedReport,
-      label: 'Report Type',
-      icon: Icons.auto_graph_rounded,
+      labelText: 'Report Type',
+      prefixIcon: Icons.auto_graph_rounded,
       items: <DropdownMenuItem<ReportType>>[
         DropdownMenuItem(
           value: ReportType.student,
@@ -522,10 +532,10 @@ class _ReportsViewState extends State<ReportsView> {
     if (_selectedReport == ReportType.day) {
       return _monthSummary();
     }
-    return _dropdownField<int>(
+    return AppDropdownFormField<int>(
       value: _selectedRangeDays,
-      label: 'Date Range',
-      icon: Icons.date_range_rounded,
+      labelText: 'Date Range',
+      prefixIcon: Icons.date_range_rounded,
       items: const <DropdownMenuItem<int>>[
         DropdownMenuItem<int>(value: 1, child: Text('Today')),
         DropdownMenuItem<int>(value: 7, child: Text('Last 7 days')),
@@ -588,30 +598,6 @@ class _ReportsViewState extends State<ReportsView> {
       'December',
     ];
     return '${months[date.month - 1]} ${date.year}';
-  }
-
-  Widget _dropdownField<T>({
-    required T? value,
-    required String label,
-    required IconData icon,
-    required List<DropdownMenuItem<T>> items,
-    required ValueChanged<T?> onChanged,
-  }) {
-    return DropdownButtonFormField<T>(
-      isExpanded: true,
-      value: value,
-      decoration: _dropdownDecoration(label: label, icon: icon),
-      items: items,
-      onChanged: onChanged,
-      icon: const Icon(Icons.keyboard_arrow_down_rounded),
-      dropdownColor: AppColors.surface,
-      menuMaxHeight: 320,
-      style: const TextStyle(
-        color: AppColors.textPrimary,
-        fontWeight: FontWeight.w600,
-        fontSize: 13,
-      ),
-    );
   }
 
   InputDecoration _dropdownDecoration({
@@ -762,11 +748,56 @@ class _ReportsViewState extends State<ReportsView> {
     }).toList();
 
     if (_selectedReport == ReportType.student) {
-      filtered = filtered.where((ReportSession s) {
-        return s.presentStudentIds.contains(_selectedStudentId) ||
-            s.leaveStudentIds.contains(_selectedStudentId) ||
-            s.absentStudentIds.contains(_selectedStudentId);
-      }).toList();
+      StudentMeta? selected;
+      for (final StudentMeta item in controller.students) {
+        if (item.id == _selectedStudentId) {
+          selected = item;
+          break;
+        }
+      }
+      final String targetBatchId = selected?.batchId.trim() ?? '';
+      final List<ReportSession> studentSessions = targetBatchId.isNotEmpty
+          ? filtered.where((ReportSession s) => s.batchId == targetBatchId).toList()
+          : filtered.where((ReportSession s) {
+              return s.presentStudentIds.contains(_selectedStudentId) ||
+                  s.leaveStudentIds.contains(_selectedStudentId) ||
+                  s.absentStudentIds.contains(_selectedStudentId);
+            }).toList();
+
+      int present = 0;
+      int leave = 0;
+      int absent = 0;
+      for (final ReportSession s in studentSessions) {
+        if (s.presentStudentIds.contains(_selectedStudentId)) {
+          present += 1;
+          continue;
+        }
+        if (s.leaveStudentIds.contains(_selectedStudentId)) {
+          leave += 1;
+          continue;
+        }
+        if (s.absentStudentIds.contains(_selectedStudentId)) {
+          absent += 1;
+          continue;
+        }
+        if (s.teacherSubmitted) {
+          absent += 1;
+        }
+      }
+      final int scheduled = studentSessions.length;
+      final double pct = scheduled == 0
+          ? 0
+          : ((present + leave) / scheduled) * 100;
+
+      filtered = studentSessions;
+
+      setState(() {
+        _studentScheduled = scheduled;
+        _studentPresent = present;
+        _studentLeave = leave;
+        _studentAbsent = absent;
+        _studentAttendancePct = pct;
+      });
     } else if (_selectedReport == ReportType.batch) {
       filtered = filtered
           .where((ReportSession s) => s.batchId == _selectedBatchId)
@@ -786,6 +817,13 @@ class _ReportsViewState extends State<ReportsView> {
       _reportTitle = _reportTitleForSelection(controller);
       _reportSubtitle = _reportSubtitleForSelection();
       _isGeneratingReport = false;
+      if (_selectedReport != ReportType.student) {
+        _studentScheduled = 0;
+        _studentPresent = 0;
+        _studentLeave = 0;
+        _studentAbsent = 0;
+        _studentAttendancePct = 0;
+      }
     });
   }
 
@@ -872,6 +910,44 @@ class _ReportsViewState extends State<ReportsView> {
               fontSize: 12,
             ),
           ),
+          if (_selectedReport == ReportType.student) ...<Widget>[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3F6FE),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2EAF8)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    _selectedEntityLabel.isEmpty
+                        ? 'Student Summary'
+                        : _selectedEntityLabel,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: <Widget>[
+                      _kpiChip('Scheduled', '$_studentScheduled'),
+                      _kpiChip('Attended', '${_studentPresent + _studentLeave}'),
+                      _kpiChip('Present', '$_studentPresent'),
+                      _kpiChip('Leave', '$_studentLeave'),
+                      _kpiChip('Absent', '$_studentAbsent'),
+                      _kpiChip('Attendance', '${_studentAttendancePct.toStringAsFixed(1)}%'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           const SizedBox(height: 12),
           Wrap(
             spacing: 10,
@@ -900,73 +976,82 @@ class _ReportsViewState extends State<ReportsView> {
                 final ReportSession s = _reportSessions[index];
                 final String d =
                     '${s.date.year}-${s.date.month.toString().padLeft(2, '0')}-${s.date.day.toString().padLeft(2, '0')}';
-                return Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFCFDFF),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE5EAF5)),
-                  ),
-                  child: Row(
-                    children: <Widget>[
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          d,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
+                return InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _openBatchDetail(s.batchId),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFCFDFF),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE5EAF5)),
+                    ),
+                    child: Row(
+                      children: <Widget>[
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            d,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
                           ),
                         ),
-                      ),
-                      Expanded(
-                        flex: 3,
-                        child: Text(
-                          s.batchName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
+                        Expanded(
+                          flex: 3,
+                          child: Text(
+                            s.batchName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          '${s.presentCount}',
-                          style: const TextStyle(
-                            color: AppColors.success,
-                            fontWeight: FontWeight.w700,
+                        Expanded(
+                          child: Text(
+                            '${s.presentCount}',
+                            style: const TextStyle(
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          '${s.leaveCount}',
-                          style: const TextStyle(
-                            color: AppColors.warning,
-                            fontWeight: FontWeight.w700,
+                        Expanded(
+                          child: Text(
+                            '${s.leaveCount}',
+                            style: const TextStyle(
+                              color: AppColors.warning,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          '${s.absentCount}',
-                          style: const TextStyle(
-                            color: AppColors.error,
-                            fontWeight: FontWeight.w700,
+                        Expanded(
+                          child: Text(
+                            '${s.absentCount}',
+                            style: const TextStyle(
+                              color: AppColors.error,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: Text(
-                          '${s.attendancePercent.toStringAsFixed(1)}%',
-                          style: const TextStyle(
-                            color: AppColors.accent,
-                            fontWeight: FontWeight.w800,
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            '${s.attendancePercent.toStringAsFixed(1)}%',
+                            style: const TextStyle(
+                              color: AppColors.accent,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          size: 18,
+                          color: AppColors.textSecondary,
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
@@ -1008,6 +1093,16 @@ class _ReportsViewState extends State<ReportsView> {
     );
   }
 
+  void _openBatchDetail(String batchId) {
+    if (batchId.trim().isEmpty) {
+      return;
+    }
+    Get.toNamed(
+      AppRoutes.batches,
+      arguments: <String, dynamic>{'focusBatchId': batchId.trim()},
+    );
+  }
+
   Widget _trendSnapshotSection(ReportsController controller) {
     final DateTime now = DateTime.now();
     final List<_DayTrend> days = List<_DayTrend>.generate(7, (int index) {
@@ -1045,156 +1140,241 @@ class _ReportsViewState extends State<ReportsView> {
   }
 
   Widget _comparativeInsightsSection(ReportsController controller) {
-    final List<BatchAttendanceRow> batches = controller.batchRows.toList(
-      growable: false,
-    )..sort((a, b) => b.attendancePercent.compareTo(a.attendancePercent));
-    final List<BatchAttendanceRow> topBatches = batches.take(3).toList();
-    final List<BatchAttendanceRow> worstBatches = batches.reversed
+    final List<ReportSession> sessions = _filterSessionsByRange(
+      controller.sessions,
+      _comparativeRangeDays,
+    );
+
+    final Map<String, _BatchAgg> batchAgg = <String, _BatchAgg>{};
+    for (final ReportSession s in sessions) {
+      final _BatchAgg agg = batchAgg.putIfAbsent(
+        s.batchId,
+        () => _BatchAgg(id: s.batchId, name: s.batchName),
+      );
+      agg.sessions += 1;
+      agg.present += s.presentCount;
+      agg.leave += s.leaveCount;
+      agg.absent += s.absentCount;
+      agg.total += s.totalStudents;
+    }
+    final List<_BatchAgg> batches = batchAgg.values.toList()
+      ..sort((a, b) => b.attendancePercent.compareTo(a.attendancePercent));
+    final List<_BatchAgg> topBatches = batches.take(3).toList();
+    final List<_BatchAgg> worstBatches = batches.reversed
         .take(3)
         .toList()
         .reversed
         .toList();
 
-    final List<TeacherAttendanceRow> teachers = controller.teacherRows.toList(
-      growable: false,
-    )..sort((a, b) => b.submissionRate.compareTo(a.submissionRate));
-    final List<TeacherAttendanceRow> topTeachers = teachers.take(3).toList();
+    final Map<String, String> teacherNames = controller.teacherNameById;
+    final Map<String, _TeacherAgg> teacherAgg = <String, _TeacherAgg>{};
+    for (final ReportSession s in sessions) {
+      final String teacherId =
+          controller.batchOptions
+              .firstWhereOrNull((b) => b.id == s.batchId)
+              ?.teacherId ??
+          '';
+      if (teacherId.isEmpty) {
+        continue;
+      }
+      final _TeacherAgg agg = teacherAgg.putIfAbsent(
+        teacherId,
+        () => _TeacherAgg(
+          id: teacherId,
+          name: teacherNames[teacherId] ?? 'Teacher $teacherId',
+        ),
+      );
+      agg.sessions += 1;
+      if (s.teacherSubmitted) {
+        agg.submitted += 1;
+      }
+      agg.present += s.presentCount;
+      agg.leave += s.leaveCount;
+      agg.absent += s.absentCount;
+      agg.total += s.totalStudents;
+    }
+    final List<_TeacherAgg> teachers = teacherAgg.values.toList()
+      ..sort((a, b) => b.submissionRate.compareTo(a.submissionRate));
+    final List<_TeacherAgg> topTeachers = teachers.take(3).toList();
 
     return _sectionCard(
       title: 'Comparative Insights',
       subtitle: 'Best vs worst batches and top teacher compliance.',
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          final bool twoColumn = constraints.maxWidth > 900;
-          final List<Widget> cards = <Widget>[
-            _miniListCard(
-              title: 'Top Batches',
-              rows: topBatches
-                  .map(
-                    (b) => _miniRow(
-                      leading: b.batchName,
-                      trailing: '${b.attendancePercent.toStringAsFixed(1)}%',
-                      caption: '${b.sessions} sessions',
-                    ),
-                  )
-                  .toList(),
-            ),
-            _miniListCard(
-              title: 'Lowest Batches',
-              rows: worstBatches
-                  .map(
-                    (b) => _miniRow(
-                      leading: b.batchName,
-                      trailing: '${b.attendancePercent.toStringAsFixed(1)}%',
-                      caption: '${b.sessions} sessions',
-                    ),
-                  )
-                  .toList(),
-            ),
-            _miniListCard(
-              title: 'Top Teacher Compliance',
-              rows: topTeachers
-                  .map(
-                    (t) => _miniRow(
-                      leading: t.teacherName,
-                      trailing: '${t.submissionRate.toStringAsFixed(1)}%',
-                      caption: '${t.submitted}/${t.sessions} submitted',
-                    ),
-                  )
-                  .toList(),
-            ),
-          ];
-          if (twoColumn) {
-            return Row(
-              children: <Widget>[
-                Expanded(child: cards[0]),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(child: cards[1]),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(child: cards[2]),
-              ],
-            );
-          }
-          return Column(
-            children: <Widget>[
-              ...cards.expand(
-                (Widget card) => <Widget>[
-                  card,
-                  const SizedBox(height: AppSpacing.md),
-                ],
-              ),
-            ]..removeLast(),
-          );
-        },
+      child: Column(
+        children: <Widget>[
+          _miniRangeSelector(
+            value: _comparativeRangeDays,
+            onChanged: (int days) {
+              setState(() {
+                _comparativeRangeDays = days;
+              });
+            },
+          ),
+          const SizedBox(height: AppSpacing.md),
+          LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final bool twoColumn = constraints.maxWidth > 900;
+              final List<Widget> cards = <Widget>[
+                _miniListCard(
+                  title: 'Top Batches',
+                  rows: topBatches
+                      .map(
+                        (b) => _miniRow(
+                          leading: b.name,
+                          trailing:
+                              '${b.attendancePercent.toStringAsFixed(1)}%',
+                          caption: '${b.sessions} sessions',
+                        ),
+                      )
+                      .toList(),
+                ),
+                _miniListCard(
+                  title: 'Lowest Batches',
+                  rows: worstBatches
+                      .map(
+                        (b) => _miniRow(
+                          leading: b.name,
+                          trailing:
+                              '${b.attendancePercent.toStringAsFixed(1)}%',
+                          caption: '${b.sessions} sessions',
+                        ),
+                      )
+                      .toList(),
+                ),
+                _miniListCard(
+                  title: 'Top Teacher Compliance',
+                  rows: topTeachers
+                      .map(
+                        (t) => _miniRow(
+                          leading: t.name,
+                          trailing: '${t.submissionRate.toStringAsFixed(1)}%',
+                          caption: '${t.submitted}/${t.sessions} submitted',
+                        ),
+                      )
+                      .toList(),
+                ),
+              ];
+              if (twoColumn) {
+                return Row(
+                  children: <Widget>[
+                    Expanded(child: cards[0]),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(child: cards[1]),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(child: cards[2]),
+                  ],
+                );
+              }
+              return Column(
+                children: <Widget>[
+                  ...cards.expand(
+                    (Widget card) => <Widget>[
+                      card,
+                      const SizedBox(height: AppSpacing.md),
+                    ],
+                  ),
+                ]..removeLast(),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
 
   Widget _exceptionsPanel(ReportsController controller) {
-    final List<ReportSession> highAbsence = controller.highAbsenceSessions;
-    final List<ReportSession> notConducted = controller.notConductedSessions;
+    final List<ReportSession> sessions = _filterSessionsByRange(
+      controller.sessions,
+      _exceptionsRangeDays,
+    );
+    final List<ReportSession> highAbsence = sessions.where((s) {
+      if (s.totalStudents == 0) {
+        return false;
+      }
+      return (s.absentCount / s.totalStudents) * 100 >= 30;
+    }).toList();
+    final List<ReportSession> notConducted = sessions
+        .where((s) => !s.classConducted)
+        .toList();
     return _sectionCard(
       title: 'Exceptions',
       subtitle: 'High absence or not-conducted sessions.',
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          final bool twoColumn = constraints.maxWidth > 900;
-          final Widget highAbsenceCard = _miniListCard(
-            title: 'High Absence Sessions',
-            rows: highAbsence.take(4).map((s) {
-              final String date =
-                  '${s.date.year}-${s.date.month.toString().padLeft(2, '0')}-${s.date.day.toString().padLeft(2, '0')}';
-              final double pct = s.totalStudents == 0
-                  ? 0
-                  : (s.absentCount / s.totalStudents) * 100;
-              return _miniRow(
-                leading: s.batchName,
-                trailing: '${pct.toStringAsFixed(1)}%',
-                caption: date,
+      child: Column(
+        children: <Widget>[
+          _miniRangeSelector(
+            value: _exceptionsRangeDays,
+            onChanged: (int days) {
+              setState(() {
+                _exceptionsRangeDays = days;
+              });
+            },
+          ),
+          const SizedBox(height: AppSpacing.md),
+          LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final bool twoColumn = constraints.maxWidth > 900;
+              final Widget highAbsenceCard = _miniListCard(
+                title: 'High Absence Sessions',
+                rows: highAbsence.take(4).map((s) {
+                  final String date =
+                      '${s.date.year}-${s.date.month.toString().padLeft(2, '0')}-${s.date.day.toString().padLeft(2, '0')}';
+                  final double pct = s.totalStudents == 0
+                      ? 0
+                      : (s.absentCount / s.totalStudents) * 100;
+                  return _miniRow(
+                    leading: s.batchName,
+                    trailing: '${pct.toStringAsFixed(1)}%',
+                    caption: date,
+                  );
+                }).toList(),
               );
-            }).toList(),
-          );
-          final Widget notConductedCard = _miniListCard(
-            title: 'Not Conducted',
-            rows: notConducted.take(4).map((s) {
-              final String date =
-                  '${s.date.year}-${s.date.month.toString().padLeft(2, '0')}-${s.date.day.toString().padLeft(2, '0')}';
-              return _miniRow(
-                leading: s.batchName,
-                trailing: date,
-                caption: s.notConductedReason.isEmpty
-                    ? 'No reason'
-                    : s.notConductedReason,
+              final Widget notConductedCard = _miniListCard(
+                title: 'Not Conducted',
+                rows: notConducted.take(4).map((s) {
+                  final String date =
+                      '${s.date.year}-${s.date.month.toString().padLeft(2, '0')}-${s.date.day.toString().padLeft(2, '0')}';
+                  return _miniRow(
+                    leading: s.batchName,
+                    trailing: date,
+                    caption: s.notConductedReason.isEmpty
+                        ? 'No reason'
+                        : s.notConductedReason,
+                  );
+                }).toList(),
               );
-            }).toList(),
-          );
-          if (twoColumn) {
-            return Row(
-              children: <Widget>[
-                Expanded(child: highAbsenceCard),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(child: notConductedCard),
-              ],
-            );
-          }
-          return Column(
-            children: <Widget>[
-              highAbsenceCard,
-              const SizedBox(height: AppSpacing.md),
-              notConductedCard,
-            ],
-          );
-        },
+              if (twoColumn) {
+                return Row(
+                  children: <Widget>[
+                    Expanded(child: highAbsenceCard),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(child: notConductedCard),
+                  ],
+                );
+              }
+              return Column(
+                children: <Widget>[
+                  highAbsenceCard,
+                  const SizedBox(height: AppSpacing.md),
+                  notConductedCard,
+                ],
+              );
+            },
+          ),
+        ],
       ),
     );
   }
 
   Widget _reportHealthPanel(ReportsController controller) {
-    final int missingSubmissions = controller.sessions
+    final List<ReportSession> sessions = _filterSessionsByRange(
+      controller.sessions,
+      _healthRangeDays,
+    );
+    final int missingSubmissions = sessions
         .where((s) => !s.teacherSubmitted)
         .length;
     DateTime? latest;
-    for (final ReportSession s in controller.sessions) {
+    for (final ReportSession s in sessions) {
       if (latest == null || s.date.isAfter(latest)) {
         latest = s.date;
       }
@@ -1206,13 +1386,27 @@ class _ReportsViewState extends State<ReportsView> {
     return _sectionCard(
       title: 'Report Health',
       subtitle: 'Data freshness and submission coverage.',
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _kpiChip('Last sync', lastSync),
-          _kpiChip('Missing submissions', '$missingSubmissions'),
-          _kpiChip('Total sessions', '${controller.sessions.length}'),
+          _miniRangeSelector(
+            value: _healthRangeDays,
+            onChanged: (int days) {
+              setState(() {
+                _healthRangeDays = days;
+              });
+            },
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: <Widget>[
+              _kpiChip('Last sync', lastSync),
+              _kpiChip('Missing submissions', '$missingSubmissions'),
+              _kpiChip('Total sessions', '${sessions.length}'),
+            ],
+          ),
         ],
       ),
     );
@@ -1302,6 +1496,61 @@ class _ReportsViewState extends State<ReportsView> {
         ),
       ),
     );
+  }
+
+  Widget _miniRangeSelector({
+    required int value,
+    required ValueChanged<int> onChanged,
+  }) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: <int>[1, 7, 30, 90, 0].map((int days) {
+          final bool active = value == days;
+          final String label = days == 0 ? 'All' : '${days}D';
+          return InkWell(
+            borderRadius: BorderRadius.circular(999),
+            onTap: () => onChanged(days),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: active ? AppColors.accent : const Color(0xFFF5F8FF),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: active ? AppColors.accent : const Color(0xFFE4EAF7),
+                ),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: active ? Colors.white : AppColors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  List<ReportSession> _filterSessionsByRange(
+    List<ReportSession> sessions,
+    int days,
+  ) {
+    if (days <= 0) {
+      return sessions;
+    }
+    final DateTime now = DateTime.now();
+    final DateTime start = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: days - 1));
+    return sessions.where((s) => !s.date.isBefore(start)).toList();
   }
 
   Widget _miniListCard({required String title, required List<Widget> rows}) {
@@ -1602,4 +1851,43 @@ class _DayTrend {
 
   final DateTime date;
   final double percent;
+}
+
+class _BatchAgg {
+  _BatchAgg({required this.id, required this.name});
+
+  final String id;
+  final String name;
+  int sessions = 0;
+  int present = 0;
+  int leave = 0;
+  int absent = 0;
+  int total = 0;
+
+  double get attendancePercent {
+    if (total == 0) {
+      return 0;
+    }
+    return ((present + leave) / total) * 100;
+  }
+}
+
+class _TeacherAgg {
+  _TeacherAgg({required this.id, required this.name});
+
+  final String id;
+  final String name;
+  int sessions = 0;
+  int submitted = 0;
+  int present = 0;
+  int leave = 0;
+  int absent = 0;
+  int total = 0;
+
+  double get submissionRate {
+    if (sessions == 0) {
+      return 0;
+    }
+    return (submitted / sessions) * 100;
+  }
 }

@@ -1,5 +1,6 @@
 import 'package:academia/app/data/models/user_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:academia/app/services/network_guard.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class AuthRepository {
@@ -16,7 +17,9 @@ class AuthRepository {
     required String email,
     required String password,
   }) async {
-    await _auth.signInWithEmailAndPassword(email: email, password: password);
+    await NetworkGuard.run(
+      _auth.signInWithEmailAndPassword(email: email, password: password),
+    );
     return getCurrentUserProfile();
   }
 
@@ -63,7 +66,7 @@ class AuthRepository {
       });
     }
 
-    await batch.commit();
+    await NetworkGuard.run(batch.commit());
 
     return getCurrentUserProfile();
   }

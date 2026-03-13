@@ -7,9 +7,11 @@ import 'package:academia/app/modules/batches/controllers/batches_controller.dart
 import 'package:academia/app/routes/app_routes.dart';
 import 'package:academia/app/theme/app_colors.dart';
 import 'package:academia/app/theme/app_spacing.dart';
+import 'package:academia/app/widgets/common/app_dropdown_form_field.dart';
 import 'package:academia/app/widgets/common/app_notifier.dart';
 import 'package:academia/app/widgets/common/app_page_scaffold.dart';
 import 'package:academia/app/widgets/layout/app_shell.dart';
+import 'package:academia/app/services/network_guard.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -294,157 +296,142 @@ class BatchesView extends StatelessWidget {
                 ),
               ),
             ),
-            SizedBox(
-              width: 180,
-              child: DropdownButtonFormField<String>(
-                isExpanded: true,
-                value: controller.statusFilter.value.isEmpty
-                    ? ''
-                    : controller.statusFilter.value,
-                decoration: const InputDecoration(
+              SizedBox(
+                width: 180,
+                child: AppDropdownFormField<String>(
                   labelText: 'Status',
-                  prefixIcon: Icon(Icons.flag_rounded),
+                  prefixIcon: Icons.flag_rounded,
+                  value: controller.statusFilter.value.isEmpty
+                      ? ''
+                      : controller.statusFilter.value,
+                  items: const <DropdownMenuItem<String>>[
+                    DropdownMenuItem<String>(value: '', child: Text('All')),
+                    DropdownMenuItem<String>(
+                      value: 'active',
+                      child: Text('Active'),
+                    ),
+                    DropdownMenuItem<String>(
+                      value: 'completed',
+                      child: Text('Completed'),
+                    ),
+                  ],
+                  onChanged: (String? value) =>
+                      controller.updateStatusFilter(value ?? ''),
                 ),
-                items: const <DropdownMenuItem<String>>[
-                  DropdownMenuItem<String>(value: '', child: Text('All')),
-                  DropdownMenuItem<String>(
-                    value: 'active',
-                    child: Text('Active'),
-                  ),
-                  DropdownMenuItem<String>(
-                    value: 'completed',
-                    child: Text('Completed'),
-                  ),
-                ],
-                onChanged: (String? value) =>
-                    controller.updateStatusFilter(value ?? ''),
               ),
-            ),
-            SizedBox(
-              width: 190,
-              child: DropdownButtonFormField<String>(
-                isExpanded: true,
-                value: controller.semesterFilter.value.isEmpty
-                    ? ''
-                    : controller.semesterFilter.value,
-                decoration: const InputDecoration(
+              SizedBox(
+                width: 190,
+                child: AppDropdownFormField<String>(
                   labelText: 'Semester',
-                  prefixIcon: Icon(Icons.layers_outlined),
-                ),
-                items: <DropdownMenuItem<String>>[
-                  const DropdownMenuItem<String>(
-                    value: '',
-                    child: Text('All'),
-                  ),
-                  ...semesterOptions.map(
-                    (String semester) => DropdownMenuItem<String>(
-                      value: semester.toLowerCase(),
-                      child: Text(
-                        semester,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                  prefixIcon: Icons.layers_outlined,
+                  value: controller.semesterFilter.value.isEmpty
+                      ? ''
+                      : controller.semesterFilter.value,
+                  items: <DropdownMenuItem<String>>[
+                    const DropdownMenuItem<String>(
+                      value: '',
+                      child: Text('All'),
+                    ),
+                    ...semesterOptions.map(
+                      (String semester) => DropdownMenuItem<String>(
+                        value: semester.toLowerCase(),
+                        child: Text(
+                          semester,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
-                  ),
-                ],
-                onChanged: (String? value) =>
-                    controller.updateSemesterFilter(value ?? ''),
+                  ],
+                  onChanged: (String? value) =>
+                      controller.updateSemesterFilter(value ?? ''),
+                ),
               ),
-            ),
-            SizedBox(
-              width: 200,
-              child: DropdownButtonFormField<String>(
-                isExpanded: true,
-                value: controller.curriculamFilter.value.isEmpty
-                    ? ''
-                    : controller.curriculamFilter.value,
-                decoration: const InputDecoration(
+              SizedBox(
+                width: 200,
+                child: AppDropdownFormField<String>(
                   labelText: 'Curriculam',
-                  prefixIcon: Icon(Icons.menu_book_outlined),
-                ),
-                items: <DropdownMenuItem<String>>[
-                  const DropdownMenuItem<String>(
-                    value: '',
-                    child: Text('All'),
-                  ),
-                  ...curriculamOptions.map(
-                    (String curriculam) => DropdownMenuItem<String>(
-                      value: curriculam.toLowerCase(),
-                      child: Text(
-                        curriculam,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                  prefixIcon: Icons.menu_book_outlined,
+                  value: controller.curriculamFilter.value.isEmpty
+                      ? ''
+                      : controller.curriculamFilter.value,
+                  items: <DropdownMenuItem<String>>[
+                    const DropdownMenuItem<String>(
+                      value: '',
+                      child: Text('All'),
+                    ),
+                    ...curriculamOptions.map(
+                      (String curriculam) => DropdownMenuItem<String>(
+                        value: curriculam.toLowerCase(),
+                        child: Text(
+                          curriculam,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
-                  ),
-                ],
-                onChanged: (String? value) =>
-                    controller.updateCurriculamFilter(value ?? ''),
+                  ],
+                  onChanged: (String? value) =>
+                      controller.updateCurriculamFilter(value ?? ''),
+                ),
               ),
-            ),
-            SizedBox(
-              width: 230,
-              child: DropdownButtonFormField<String>(
-                isExpanded: true,
-                value: controller.teacherFilter.value.isEmpty
-                    ? ''
-                    : controller.teacherFilter.value,
-                decoration: const InputDecoration(
+              SizedBox(
+                width: 230,
+                child: AppDropdownFormField<String>(
                   labelText: 'Teacher',
-                  prefixIcon: Icon(Icons.person_rounded),
-                ),
-                items: <DropdownMenuItem<String>>[
-                  const DropdownMenuItem<String>(
-                    value: '',
-                    child: Text('All'),
-                  ),
-                  ...controller.approvedTeachers.map(
-                    (UserModel teacher) => DropdownMenuItem<String>(
-                      value: teacher.id,
-                      child: Text(
-                        teacher.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                  prefixIcon: Icons.person_rounded,
+                  value: controller.teacherFilter.value.isEmpty
+                      ? ''
+                      : controller.teacherFilter.value,
+                  items: <DropdownMenuItem<String>>[
+                    const DropdownMenuItem<String>(
+                      value: '',
+                      child: Text('All'),
+                    ),
+                    ...controller.approvedTeachers.map(
+                      (UserModel teacher) => DropdownMenuItem<String>(
+                        value: teacher.id,
+                        child: Text(
+                          teacher.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
-                  ),
-                ],
-                onChanged: (String? value) =>
-                    controller.updateTeacherFilter(value ?? ''),
-              ),
-            ),
-            SizedBox(
-              width: 200,
-              child: DropdownButtonFormField<String>(
-                isExpanded: true,
-                value: controller.sortBy.value,
-                decoration: const InputDecoration(
-                  labelText: 'Sort By',
-                  prefixIcon: Icon(Icons.sort_rounded),
+                  ],
+                  onChanged: (String? value) =>
+                      controller.updateTeacherFilter(value ?? ''),
                 ),
-                items: const <DropdownMenuItem<String>>[
-                  DropdownMenuItem<String>(
-                    value: 'createdat',
-                    child: Text('Created Date'),
-                  ),
-                  DropdownMenuItem<String>(value: 'name', child: Text('Name')),
-                  DropdownMenuItem<String>(
-                    value: 'students',
-                    child: Text('Students'),
-                  ),
-                  DropdownMenuItem<String>(
-                    value: 'teacher',
-                    child: Text('Teacher'),
-                  ),
-                  DropdownMenuItem<String>(
-                    value: 'status',
-                    child: Text('Status'),
-                  ),
-                ],
-                onChanged: (String? value) =>
-                    controller.updateSort(value ?? 'createdat'),
               ),
-            ),
+              SizedBox(
+                width: 200,
+                child: AppDropdownFormField<String>(
+                  labelText: 'Sort By',
+                  prefixIcon: Icons.sort_rounded,
+                  value: controller.sortBy.value,
+                  items: const <DropdownMenuItem<String>>[
+                    DropdownMenuItem<String>(
+                      value: 'createdat',
+                      child: Text('Created Date'),
+                    ),
+                    DropdownMenuItem<String>(value: 'name', child: Text('Name')),
+                    DropdownMenuItem<String>(
+                      value: 'students',
+                      child: Text('Students'),
+                    ),
+                    DropdownMenuItem<String>(
+                      value: 'teacher',
+                      child: Text('Teacher'),
+                    ),
+                    DropdownMenuItem<String>(
+                      value: 'status',
+                      child: Text('Status'),
+                    ),
+                  ],
+                  onChanged: (String? value) =>
+                      controller.updateSort(value ?? 'createdat'),
+                ),
+              ),
             OutlinedButton.icon(
               onPressed: controller.clearFilters,
               icon: const Icon(Icons.refresh_rounded),
@@ -1028,50 +1015,46 @@ class BatchesView extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    DropdownButtonFormField<String>(
-                      value: selectedSemester,
-                      decoration: const InputDecoration(
+                      AppDropdownFormField<String>(
                         labelText: 'Semester',
-                        prefixIcon: Icon(Icons.layers_outlined),
+                        prefixIcon: Icons.layers_outlined,
+                        value: selectedSemester,
+                        items: semesterOptions
+                            .map(
+                              (String semester) => DropdownMenuItem<String>(
+                                value: semester,
+                                child: Text(semester),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (String? value) {
+                          setState(() {
+                            selectedSemester = value;
+                          });
+                        },
                       ),
-                      items: semesterOptions
-                          .map(
-                            (String semester) => DropdownMenuItem<String>(
-                              value: semester,
-                              child: Text(semester),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (String? value) {
-                        setState(() {
-                          selectedSemester = value;
-                        });
-                      },
-                    ),
                     const SizedBox(height: AppSpacing.sm),
-                    DropdownButtonFormField<String>(
-                      value: selectedCurriculam,
-                      decoration: const InputDecoration(
+                      AppDropdownFormField<String>(
                         labelText: 'Curriculam',
-                        prefixIcon: Icon(Icons.menu_book_outlined),
+                        prefixIcon: Icons.menu_book_outlined,
+                        value: selectedCurriculam,
+                        items: curriculamOptions
+                            .map(
+                              (String value) => DropdownMenuItem<String>(
+                                value: value,
+                                child: Text(value),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (String? value) {
+                          setState(() {
+                            selectedCurriculam = value;
+                            if (value != 'Other') {
+                              otherCurriculamController.clear();
+                            }
+                          });
+                        },
                       ),
-                      items: curriculamOptions
-                          .map(
-                            (String value) => DropdownMenuItem<String>(
-                              value: value,
-                              child: Text(value),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (String? value) {
-                        setState(() {
-                          selectedCurriculam = value;
-                          if (value != 'Other') {
-                            otherCurriculamController.clear();
-                          }
-                        });
-                      },
-                    ),
                     if (selectedCurriculam == 'Other') ...<Widget>[
                       const SizedBox(height: AppSpacing.sm),
                       TextField(
@@ -1083,74 +1066,68 @@ class BatchesView extends StatelessWidget {
                       ),
                     ],
                     const SizedBox(height: AppSpacing.sm),
-                    DropdownButtonFormField<String>(
-                      value: selectedDaysPattern,
-                      decoration: const InputDecoration(
+                      AppDropdownFormField<String>(
                         labelText: 'Days Pattern',
-                        prefixIcon: Icon(Icons.event_repeat_rounded),
+                        prefixIcon: Icons.event_repeat_rounded,
+                        value: selectedDaysPattern,
+                        items: dayPatternOptions
+                            .map(
+                              (String value) => DropdownMenuItem<String>(
+                                value: value,
+                                child: Text(value),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (String? value) {
+                          setState(() {
+                            selectedDaysPattern = value;
+                          });
+                        },
                       ),
-                      items: dayPatternOptions
-                          .map(
-                            (String value) => DropdownMenuItem<String>(
-                              value: value,
-                              child: Text(value),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (String? value) {
-                        setState(() {
-                          selectedDaysPattern = value;
-                        });
-                      },
-                    ),
                     const SizedBox(height: AppSpacing.sm),
-                    DropdownButtonFormField<String>(
-                      value: selectedTiming,
-                      decoration: const InputDecoration(
+                      AppDropdownFormField<String>(
                         labelText: 'Timing',
-                        prefixIcon: Icon(Icons.access_time_rounded),
+                        prefixIcon: Icons.access_time_rounded,
+                        value: selectedTiming,
+                        items: timingOptions
+                            .map(
+                              (String value) => DropdownMenuItem<String>(
+                                value: value,
+                                child: Text(value),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (String? value) {
+                          setState(() {
+                            selectedTiming = value;
+                            if (value != 'Other') {
+                              otherTimingController.clear();
+                            }
+                          });
+                        },
                       ),
-                      items: timingOptions
-                          .map(
-                            (String value) => DropdownMenuItem<String>(
-                              value: value,
-                              child: Text(value),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (String? value) {
-                        setState(() {
-                          selectedTiming = value;
-                          if (value != 'Other') {
-                            otherTimingController.clear();
-                          }
-                        });
-                      },
-                    ),
                     const SizedBox(height: AppSpacing.sm),
-                    DropdownButtonFormField<String>(
-                      value: selectedStatus,
-                      decoration: const InputDecoration(
+                      AppDropdownFormField<String>(
                         labelText: 'Status',
-                        prefixIcon: Icon(Icons.flag_outlined),
+                        prefixIcon: Icons.flag_outlined,
+                        value: selectedStatus,
+                        items: statusOptions
+                            .map(
+                              (String value) => DropdownMenuItem<String>(
+                                value: value,
+                                child: Text(value),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (String? value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setState(() {
+                            selectedStatus = value;
+                          });
+                        },
                       ),
-                      items: statusOptions
-                          .map(
-                            (String value) => DropdownMenuItem<String>(
-                              value: value,
-                              child: Text(value),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (String? value) {
-                        if (value == null) {
-                          return;
-                        }
-                        setState(() {
-                          selectedStatus = value;
-                        });
-                      },
-                    ),
                     if (selectedTiming == 'Other') ...<Widget>[
                       const SizedBox(height: AppSpacing.sm),
                       TextField(
@@ -1167,12 +1144,11 @@ class BatchesView extends StatelessWidget {
                       final bool validSelection = teachers.any(
                         (UserModel teacher) => teacher.id == selectedTeacherId,
                       );
-                      return DropdownButtonFormField<String>(
+                      return AppDropdownFormField<String>(
+                        labelText: 'Teacher',
+                        prefixIcon: Icons.cast_for_education_rounded,
                         value: validSelection ? selectedTeacherId : null,
-                        decoration: const InputDecoration(
-                          labelText: 'Teacher',
-                          prefixIcon: Icon(Icons.cast_for_education_rounded),
-                        ),
+                        enabled: teachers.isNotEmpty,
                         items: teachers
                             .map(
                               (teacher) => DropdownMenuItem<String>(
@@ -1181,21 +1157,22 @@ class BatchesView extends StatelessWidget {
                               ),
                             )
                             .toList(),
-                        onChanged: teachers.isEmpty
-                            ? null
-                            : (String? value) {
-                                setState(() {
-                                  selectedTeacherId = value;
-                                  String? matchedName;
-                                  for (final teacher in teachers) {
-                                    if (teacher.id == value) {
-                                      matchedName = teacher.name;
-                                      break;
-                                    }
-                                  }
-                                  selectedTeacherName = matchedName;
-                                });
-                              },
+                        onChanged: (String? value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setState(() {
+                            selectedTeacherId = value;
+                            String? matchedName;
+                            for (final teacher in teachers) {
+                              if (teacher.id == value) {
+                                matchedName = teacher.name;
+                                break;
+                              }
+                            }
+                            selectedTeacherName = matchedName;
+                          });
+                        },
                       );
                     }),
                     const SizedBox(height: AppSpacing.sm),
@@ -1579,10 +1556,10 @@ class BatchesView extends StatelessWidget {
     String operationLabel = 'Operation',
   }) async {
     try {
-      await action();
+      await NetworkGuard.run(action());
     } catch (e) {
       if (AppNotifier.isNetworkError(e)) {
-        AppNotifier.showRetry(
+        await AppNotifier.showNetworkDialog(
           title: 'Network error',
           message: 'Unable to sync. Check connection and retry.',
           onRetry: () => _runGuardedAction(
@@ -2012,12 +1989,10 @@ class BatchesView extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(height: AppSpacing.sm),
-                                DropdownButtonFormField<String>(
+                                AppDropdownFormField<String>(
+                                  labelText: 'Semester',
+                                  prefixIcon: Icons.layers_outlined,
                                   value: selectedSemester,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Semester',
-                                    prefixIcon: Icon(Icons.layers_outlined),
-                                  ),
                                   items: semesterOptions
                                       .map(
                                         (String semester) =>
@@ -2034,12 +2009,10 @@ class BatchesView extends StatelessWidget {
                                   },
                                 ),
                                 const SizedBox(height: AppSpacing.sm),
-                                DropdownButtonFormField<String>(
+                                AppDropdownFormField<String>(
+                                  labelText: 'Curriculam',
+                                  prefixIcon: Icons.menu_book_outlined,
                                   value: selectedCurriculam,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Curriculam',
-                                    prefixIcon: Icon(Icons.menu_book_outlined),
-                                  ),
                                   items: curriculamOptions
                                       .map(
                                         (String value) =>
@@ -2077,14 +2050,10 @@ class BatchesView extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(height: AppSpacing.xs),
-                                DropdownButtonFormField<String>(
+                                AppDropdownFormField<String>(
+                                  labelText: 'Select Pattern',
+                                  prefixIcon: Icons.event_repeat_rounded,
                                   value: selectedDaysPattern,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Select Pattern',
-                                    prefixIcon: Icon(
-                                      Icons.event_repeat_rounded,
-                                    ),
-                                  ),
                                   items: dayPatternOptions
                                       .map(
                                         (String pattern) =>
@@ -2101,12 +2070,10 @@ class BatchesView extends StatelessWidget {
                                   },
                                 ),
                                 const SizedBox(height: AppSpacing.sm),
-                                DropdownButtonFormField<String>(
+                                AppDropdownFormField<String>(
+                                  labelText: 'Timing',
+                                  prefixIcon: Icons.access_time_rounded,
                                   value: selectedTiming,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Timing',
-                                    prefixIcon: Icon(Icons.access_time_rounded),
-                                  ),
                                   items: timingOptions
                                       .map(
                                         (String timing) =>
@@ -2170,16 +2137,13 @@ class BatchesView extends StatelessWidget {
                                     (UserModel teacher) =>
                                         teacher.id == selectedTeacherId,
                                   );
-                                  return DropdownButtonFormField<String>(
+                                  return AppDropdownFormField<String>(
+                                    labelText: 'Teacher',
+                                    prefixIcon: Icons.cast_for_education_rounded,
                                     value: validSelection
                                         ? selectedTeacherId
                                         : null,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Teacher',
-                                      prefixIcon: Icon(
-                                        Icons.cast_for_education_rounded,
-                                      ),
-                                    ),
+                                    enabled: teachers.isNotEmpty,
                                     items: teachers
                                         .map(
                                           (teacher) => DropdownMenuItem<String>(
@@ -2188,21 +2152,22 @@ class BatchesView extends StatelessWidget {
                                           ),
                                         )
                                         .toList(),
-                                    onChanged: teachers.isEmpty
-                                        ? null
-                                        : (String? value) {
-                                            setState(() {
-                                              selectedTeacherId = value;
-                                              String? matchedName;
-                                              for (final teacher in teachers) {
-                                                if (teacher.id == value) {
-                                                  matchedName = teacher.name;
-                                                  break;
-                                                }
-                                              }
-                                              selectedTeacherName = matchedName;
-                                            });
-                                          },
+                                    onChanged: (String? value) {
+                                      if (value == null) {
+                                        return;
+                                      }
+                                      setState(() {
+                                        selectedTeacherId = value;
+                                        String? matchedName;
+                                        for (final teacher in teachers) {
+                                          if (teacher.id == value) {
+                                            matchedName = teacher.name;
+                                            break;
+                                          }
+                                        }
+                                        selectedTeacherName = matchedName;
+                                      });
+                                    },
                                   );
                                 }),
                                 const SizedBox(height: AppSpacing.md),

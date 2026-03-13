@@ -1426,10 +1426,10 @@ extension _AttendanceViewDialogsPart on AttendanceView {
     required Future<void> Function() action,
   }) async {
     try {
-      await action();
+      await NetworkGuard.run(action());
     } catch (e) {
       if (AppNotifier.isNetworkError(e)) {
-        AppNotifier.showRetry(
+        await AppNotifier.showNetworkDialog(
           title: 'Network error',
           message: 'Unable to sync. Check connection and retry.',
           onRetry: () => _runGuardedDialogAction(

@@ -33,6 +33,16 @@ class AttendanceService {
     return _repository.getSession(sessionId);
   }
 
+  Future<QuerySnapshot<Map<String, dynamic>>> fetchSessionsByDateAndBatch({
+    required String dateKey,
+    required String batchId,
+  }) {
+    return _repository.fetchSessionsByDateAndBatch(
+      dateKey: dateKey,
+      batchId: batchId,
+    );
+  }
+
   Future<void> setSession({
     required String sessionId,
     required Map<String, dynamic> data,
@@ -92,3 +102,5 @@ class AttendanceService {
     return namesById;
   }
 }
+
+

@@ -1293,13 +1293,10 @@ extension _AttendanceViewAdminPart on AttendanceView {
                     children: <Widget>[
                       SizedBox(
                         width: fieldWidth(180),
-                        child: DropdownButtonFormField<int>(
-                          isExpanded: true,
+                        child: AppDropdownFormField<int>(
                           value: controller.historyRangeDays.value,
-                          decoration: const InputDecoration(
-                            labelText: 'Date Range',
-                            prefixIcon: Icon(Icons.date_range_rounded),
-                          ),
+                          labelText: 'Date Range',
+                          prefixIcon: Icons.date_range_rounded,
                           items: const <DropdownMenuItem<int>>[
                             DropdownMenuItem<int>(
                               value: 1,
@@ -1324,15 +1321,12 @@ extension _AttendanceViewAdminPart on AttendanceView {
                       ),
                       SizedBox(
                         width: fieldWidth(220),
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
+                        child: AppDropdownFormField<String>(
                           value: controller.historyBatchId.value.isEmpty
                               ? ''
                               : controller.historyBatchId.value,
-                          decoration: const InputDecoration(
-                            labelText: 'Batch',
-                            prefixIcon: Icon(Icons.class_rounded),
-                          ),
+                          labelText: 'Batch',
+                          prefixIcon: Icons.class_rounded,
                           items: <DropdownMenuItem<String>>[
                             const DropdownMenuItem<String>(
                               value: '',
@@ -1355,15 +1349,12 @@ extension _AttendanceViewAdminPart on AttendanceView {
                       ),
                       SizedBox(
                         width: fieldWidth(220),
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
+                        child: AppDropdownFormField<String>(
                           value: controller.historyTeacherId.value.isEmpty
                               ? ''
                               : controller.historyTeacherId.value,
-                          decoration: const InputDecoration(
-                            labelText: 'Teacher',
-                            prefixIcon: Icon(Icons.person_rounded),
-                          ),
+                          labelText: 'Teacher',
+                          prefixIcon: Icons.person_rounded,
                           items: <DropdownMenuItem<String>>[
                             const DropdownMenuItem<String>(
                               value: '',
@@ -1387,15 +1378,12 @@ extension _AttendanceViewAdminPart on AttendanceView {
                       ),
                       SizedBox(
                         width: fieldWidth(210),
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
+                        child: AppDropdownFormField<String>(
                           value: controller.historyStatus.value.isEmpty
                               ? ''
                               : controller.historyStatus.value,
-                          decoration: const InputDecoration(
-                            labelText: 'Status',
-                            prefixIcon: Icon(Icons.flag_rounded),
-                          ),
+                          labelText: 'Status',
+                          prefixIcon: Icons.flag_rounded,
                           items: const <DropdownMenuItem<String>>[
                             DropdownMenuItem<String>(
                               value: '',

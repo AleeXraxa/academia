@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:academia/app/data/repositories/auth_repository.dart';
 import 'package:academia/app/core/enums/user_role.dart';
 import 'package:academia/app/core/session/app_session.dart';
@@ -105,11 +107,19 @@ class LoginController extends GetxController {
           message: AuthErrorMapper.loginMessage(e),
         );
       }
-    } catch (_) {
-      await AppMessageDialog.showError(
-        title: 'Unexpected Error',
-        message: 'Unexpected error during login.',
-      );
+    } catch (e) {
+      if (e is TimeoutException) {
+        await AppMessageDialog.showError(
+          title: 'No Internet Connection',
+          message:
+              'We could not reach the server. Check your internet connection and try again.',
+        );
+      } else {
+        await AppMessageDialog.showError(
+          title: 'Unexpected Error',
+          message: 'Unexpected error during login.',
+        );
+      }
     } finally {
       isLoading.value = false;
     }

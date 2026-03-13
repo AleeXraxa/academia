@@ -1,6 +1,7 @@
 ﻿import 'package:academia/app/core/session/app_session.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:academia/app/services/network_guard.dart';
 import 'package:get/get.dart';
 
 class AuditLogService {
@@ -31,7 +32,7 @@ class AuditLogService {
       actorEmail: actorEmail,
       actorName: actorName,
     );
-    await _firestore.collection('audit_logs').add(payload);
+    await NetworkGuard.run(_firestore.collection('audit_logs').add(payload));
   }
 
   void addToBatch(

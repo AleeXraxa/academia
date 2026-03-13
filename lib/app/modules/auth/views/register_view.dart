@@ -2,6 +2,7 @@ import 'package:academia/app/modules/auth/controllers/register_controller.dart';
 import 'package:academia/app/routes/app_routes.dart';
 import 'package:academia/app/theme/app_colors.dart';
 import 'package:academia/app/theme/app_spacing.dart';
+import 'package:academia/app/widgets/common/app_dropdown_form_field.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -193,12 +194,10 @@ class _RegisterPanel extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.md),
               Obx(() {
-                return DropdownButtonFormField<String>(
+                return AppDropdownFormField<String>(
+                  labelText: 'Role',
+                  prefixIcon: Icons.badge_outlined,
                   value: controller.selectedRole.value,
-                  decoration: const InputDecoration(
-                    labelText: 'Role',
-                    prefixIcon: Icon(Icons.badge_outlined),
-                  ),
                   items: const <DropdownMenuItem<String>>[
                     DropdownMenuItem(value: 'Teacher', child: Text('Teacher')),
                     DropdownMenuItem(value: 'Student', child: Text('Student')),
