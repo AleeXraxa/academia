@@ -2339,4 +2339,360 @@ extension _AttendanceViewAdminPart on AttendanceView {
     final int attended = session.presentCount + session.leaveCount;
     return (attended / total) * 100;
   }
+
+  Widget _adminMobileShell(
+    BuildContext context,
+    AttendanceController controller,
+  ) {
+    return Obx(() {
+      final int tabIndex = controller.mobileTabIndex.value;
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: Text(_adminMobileTabTitle(tabIndex)),
+          centerTitle: false,
+          elevation: 0,
+          backgroundColor: AppColors.surface,
+          foregroundColor: AppColors.textPrimary,
+          actions: <Widget>[
+            IconButton(
+              tooltip: 'Logout',
+              onPressed: () async {
+                await FirebaseAuth.instance.signOut();
+                if (Get.isRegistered<AttendanceController>()) {
+                  Get.delete<AttendanceController>();
+                }
+                Get.find<AppSession>().clear();
+                Get.offAllNamed(AppRoutes.login);
+              },
+              icon: const Icon(Icons.logout_rounded),
+            ),
+          ],
+        ),
+        body: SafeArea(
+          child: _adminMobileBackground(
+            child: IndexedStack(
+              index: tabIndex,
+              children: <Widget>[
+                _adminMobileSessionsTab(context, controller),
+                _adminMobileHistoryTab(context, controller),
+                _adminMobileBatchesTab(controller),
+                _adminMobileStudentsTab(),
+              ],
+            ),
+          ),
+        ),
+        bottomNavigationBar: FlashyTabBar(
+          selectedIndex: tabIndex,
+          showElevation: true,
+          onItemSelected: controller.updateMobileTab,
+          items: <FlashyTabBarItem>[
+            FlashyTabBarItem(
+              icon: const Icon(Icons.fact_check_rounded),
+              title: const Text('Sessions'),
+              activeColor: AppColors.accent,
+              inactiveColor: AppColors.textSecondary,
+            ),
+            FlashyTabBarItem(
+              icon: const Icon(Icons.history_rounded),
+              title: const Text('History'),
+              activeColor: AppColors.accent,
+              inactiveColor: AppColors.textSecondary,
+            ),
+            FlashyTabBarItem(
+              icon: const Icon(Icons.class_rounded),
+              title: const Text('Batches'),
+              activeColor: AppColors.accent,
+              inactiveColor: AppColors.textSecondary,
+            ),
+            FlashyTabBarItem(
+              icon: const Icon(Icons.people_alt_rounded),
+              title: const Text('Students'),
+              activeColor: AppColors.accent,
+              inactiveColor: AppColors.textSecondary,
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  String _adminMobileTabTitle(int index) {
+    switch (index) {
+      case 0:
+        return 'Sessions';
+      case 1:
+        return 'History';
+      case 2:
+        return 'Batches';
+      default:
+        return 'Students';
+    }
+  }
+
+  Widget _adminMobileBackground({required Widget child}) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: <Color>[Color(0xFFF7FAFF), Color(0xFFF2F6FD)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+      child: Stack(
+        children: <Widget>[
+          Positioned(
+            top: -40,
+            right: -30,
+            child: Container(
+              width: 140,
+              height: 140,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0x142F5DFF),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -50,
+            left: -20,
+            child: Container(
+              width: 160,
+              height: 160,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0x101E4ED8),
+              ),
+            ),
+          ),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _adminMobileSessionsTab(
+    BuildContext context,
+    AttendanceController controller,
+  ) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        children: <Widget>[
+          _topSummaryCard(controller, isMobile: true),
+          const SizedBox(height: AppSpacing.md),
+          Obx(
+            () => AnimatedSize(
+              duration: _kBaseMotion,
+              curve: Curves.easeOutCubic,
+              child: controller.showMarkForm.value
+                  ? _markForm(context, controller, isMobile: true)
+                  : const SizedBox.shrink(),
+            ),
+          ),
+          Obx(() {
+            if (controller.showMarkForm.value) {
+              return const SizedBox.shrink();
+            }
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: <Widget>[
+                FilledButton.icon(
+                  onPressed: controller.openMarkForm,
+                  icon: const Icon(Icons.add_task_rounded),
+                  label: const Text('Generate Session'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: controller.openExtraMarkForm,
+                  icon: const Icon(Icons.auto_fix_high_rounded),
+                  label: const Text('Generate Extra'),
+                ),
+              ],
+            );
+          }),
+          const SizedBox(height: AppSpacing.md),
+          SizedBox(
+            height: 520,
+            child: _todaySessionsTable(
+              context,
+              controller,
+              isMobile: true,
+              isTeacher: false,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _adminMobileHistoryTab(
+    BuildContext context,
+    AttendanceController controller,
+  ) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: _adminHistorySection(context, controller, isMobile: true),
+    );
+  }
+
+  Widget _adminMobileBatchesTab(AttendanceController controller) {
+    return Obx(() {
+      final List<BatchModel> items = controller.batches;
+      if (items.isEmpty) {
+        return const Center(
+          child: Text(
+            'No batches available.',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+        );
+      }
+      return ListView.separated(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+        itemBuilder: (BuildContext context, int index) {
+          final BatchModel batch = items[index];
+          return _adminBatchCard(batch);
+        },
+      );
+    });
+  }
+
+  Widget _adminBatchCard(BatchModel batch) {
+    final String teacherName = (batch.teacherName ?? '').trim();
+    final String scheduleLabel = _batchPatternLabel(batch);
+    final int studentsCount = batch.studentsCount ?? 0;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x0D0F172A),
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            batch.name,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Schedule: $scheduleLabel',
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Students: $studentsCount',
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            teacherName.isEmpty ? 'Teacher: Unassigned' : 'Teacher: $teacherName',
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _adminMobileStudentsTab() {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('students')
+          .orderBy('createdAt', descending: true)
+          .snapshots(),
+      builder: (
+        BuildContext context,
+        AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
+      ) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final List<StudentModel> items = snapshot.data?.docs
+                .map(
+                  (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
+                      StudentModel.fromMap(id: doc.id, map: doc.data()),
+                )
+                .toList() ??
+            <StudentModel>[];
+        if (items.isEmpty) {
+          return const Center(
+            child: Text(
+              'No students available.',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          );
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          itemCount: items.length,
+          separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+          itemBuilder: (BuildContext context, int index) {
+            return _adminStudentCard(items[index]);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _adminStudentCard(StudentModel student) {
+    final String studentId = (student.studentId ?? '').trim();
+    final String batchName = (student.batchName ?? '').trim();
+    final String status = student.status.trim().isEmpty
+        ? 'active'
+        : student.status.trim();
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x0D0F172A),
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            student.name,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+          ),
+          if (studentId.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 6),
+            Text(
+              'ID: $studentId',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ],
+          const SizedBox(height: 6),
+          Text(
+            'Batch: ${batchName.isEmpty ? '--' : batchName}',
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Status: $status',
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
 }

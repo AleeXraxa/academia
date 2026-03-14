@@ -104,14 +104,14 @@ class _MobileLoginPanel extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.md),
           Text(
-            'Teacher Sign In',
+            'Sign In',
             style: Theme.of(
               context,
             ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'Login to mark today\'s attendance.',
+            'Login to manage attendance on the go.',
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
@@ -172,7 +172,7 @@ class _MobileLoginPanel extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.md),
           Text(
-            'Only approved teacher accounts can access attendance on mobile.',
+            'Approved teacher, admin, and CAH accounts can access attendance on mobile.',
             style: Theme.of(
               context,
             ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),

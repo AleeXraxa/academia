@@ -175,8 +175,7 @@ extension _AttendanceViewDialogsPart on AttendanceView {
                                   });
                                 },
                                 decoration: InputDecoration(
-                                  labelText:
-                                      'Reason for class not conducted',
+                                  labelText: 'Reason for class not conducted',
                                   hintText:
                                       'Example: Trainer unavailable, but students were present.',
                                   errorText: reasonError,
@@ -609,8 +608,7 @@ extension _AttendanceViewDialogsPart on AttendanceView {
                                                 leaveStudentIds: leaveIds
                                                     .toList(),
                                                 absentStudentIds: absentIds,
-                                                notConductedReason:
-                                                    reasonText,
+                                                notConductedReason: reasonText,
                                               );
                                           controller.clearTeacherDraft(
                                             session.id,
@@ -666,8 +664,7 @@ extension _AttendanceViewDialogsPart on AttendanceView {
                                             leaveStudentIds: leaveIds.toList(),
                                             absentStudentIds: absentIds,
                                             reason: '$e',
-                                            notConductedReason:
-                                                reasonText,
+                                            notConductedReason: reasonText,
                                           );
                                           controller.cacheTeacherDraft(
                                             sessionId: session.id,
@@ -871,8 +868,7 @@ extension _AttendanceViewDialogsPart on AttendanceView {
                       itemCount: session.auditLogs.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 6),
                       itemBuilder: (BuildContext context, int index) {
-                        final AttendanceAuditLog log =
-                            session.auditLogs[index];
+                        final AttendanceAuditLog log = session.auditLogs[index];
                         final DateTime at = log.at ?? DateTime(2000, 1, 1);
                         final String date =
                             '${at.day.toString().padLeft(2, '0')}/${at.month.toString().padLeft(2, '0')}/${at.year}';
@@ -1007,7 +1003,8 @@ extension _AttendanceViewDialogsPart on AttendanceView {
         child: StatefulBuilder(
           builder:
               (BuildContext context, void Function(void Function()) setState) {
-                final bool isNoteRequired = controller.requireCorrectionNote.value;
+                final bool isNoteRequired =
+                    controller.requireCorrectionNote.value;
                 final int total = session.totalStudents > 0
                     ? session.totalStudents
                     : students.length;
@@ -1432,10 +1429,8 @@ extension _AttendanceViewDialogsPart on AttendanceView {
         await AppNotifier.showNetworkDialog(
           title: 'Network error',
           message: 'Unable to sync. Check connection and retry.',
-          onRetry: () => _runGuardedDialogAction(
-            context: context,
-            action: action,
-          ),
+          onRetry: () =>
+              _runGuardedDialogAction(context: context, action: action),
         );
         return;
       }

@@ -76,7 +76,8 @@ class LoginController extends GetxController {
       }
 
       final UserRole role = _toRole(user.role);
-      if (role == UserRole.teacher && !isMobile) {
+      final bool isMobileDevice = isMobile || GetPlatform.isMobile;
+      if (role == UserRole.teacher && !isMobileDevice) {
         await _authService.logout();
         Get.find<AppSession>().clear();
         await AppMessageDialog.showError(
@@ -88,11 +89,16 @@ class LoginController extends GetxController {
       }
 
       Get.find<AppSession>().setRole(role);
-      if (role == UserRole.teacher) {
+      final bool adminMobileAccess = isMobileDevice &&
+          (role == UserRole.cah ||
+              role == UserRole.administrator ||
+              role == UserRole.superAdmin);
+      if (role == UserRole.teacher || adminMobileAccess) {
         Get.offAllNamed(AppRoutes.attendance);
       } else {
         Get.offAllNamed(AppRoutes.dashboard);
       }
+
     } on FirebaseAuthException catch (e) {
       debugPrint('LOGIN FirebaseAuthException code=${e.code} message=${e.message}');
       if (_isNetworkAuthError(e)) {
