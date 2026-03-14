@@ -2552,54 +2552,68 @@ extension _AttendanceViewAdminPart on AttendanceView {
         itemCount: items.length,
         separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
         itemBuilder: (BuildContext context, int index) {
-          final BatchModel batch = items[index];
-          return _adminBatchCard(batch);
+          return _adminMobileBatchCard(context, items[index]);
         },
       );
     });
   }
 
-  Widget _adminBatchCard(BatchModel batch) {
+  Widget _adminMobileBatchCard(BuildContext context, BatchModel batch) {
     final String teacherName = (batch.teacherName ?? '').trim();
     final String scheduleLabel = _batchPatternLabel(batch);
     final int studentsCount = batch.studentsCount ?? 0;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(
-            color: Color(0x0D0F172A),
-            blurRadius: 16,
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            batch.name,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Schedule: $scheduleLabel',
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Students: $studentsCount',
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            teacherName.isEmpty ? 'Teacher: Unassigned' : 'Teacher: $teacherName',
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-          ),
-        ],
+    return InkWell(
+      onTap: () => _openAdminBatchDetailDialog(context, batch),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border),
+          boxShadow: const <BoxShadow>[
+            BoxShadow(
+              color: Color(0x0D0F172A),
+              blurRadius: 16,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              batch.name,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Schedule: $scheduleLabel',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Students: $studentsCount',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              teacherName.isEmpty
+                  ? 'Teacher: Unassigned'
+                  : 'Teacher: $teacherName',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2610,86 +2624,216 @@ extension _AttendanceViewAdminPart on AttendanceView {
           .collection('students')
           .orderBy('createdAt', descending: true)
           .snapshots(),
-      builder: (
-        BuildContext context,
-        AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-      ) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final List<StudentModel> items = snapshot.data?.docs
-                .map(
-                  (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
-                      StudentModel.fromMap(id: doc.id, map: doc.data()),
-                )
-                .toList() ??
-            <StudentModel>[];
-        if (items.isEmpty) {
-          return const Center(
-            child: Text(
-              'No students available.',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          );
-        }
-        return ListView.separated(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          itemCount: items.length,
-          separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
-          itemBuilder: (BuildContext context, int index) {
-            return _adminStudentCard(items[index]);
+      builder:
+          (
+            BuildContext context,
+            AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
+          ) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final List<StudentModel> items =
+                snapshot.data?.docs
+                    .map(
+                      (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
+                          StudentModel.fromMap(id: doc.id, map: doc.data()),
+                    )
+                    .toList() ??
+                <StudentModel>[];
+            if (items.isEmpty) {
+              return const Center(
+                child: Text(
+                  'No students available.',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+              );
+            }
+            return ListView.separated(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              itemCount: items.length,
+              separatorBuilder: (_, __) =>
+                  const SizedBox(height: AppSpacing.sm),
+              itemBuilder: (BuildContext context, int index) {
+                return _adminMobileStudentCard(context, items[index]);
+              },
+            );
           },
-        );
-      },
     );
   }
 
-  Widget _adminStudentCard(StudentModel student) {
+  Widget _adminMobileStudentCard(BuildContext context, StudentModel student) {
     final String studentId = (student.studentId ?? '').trim();
     final String batchName = (student.batchName ?? '').trim();
-    final String status = student.status.trim().isEmpty
-        ? 'active'
-        : student.status.trim();
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(
-            color: Color(0x0D0F172A),
-            blurRadius: 16,
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            student.name,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-          ),
-          if (studentId.isNotEmpty) ...<Widget>[
+    final String status = student.status.trim().isNotEmpty
+        ? student.status.trim()
+        : 'active';
+    return InkWell(
+      onTap: () => _openAdminStudentDetailDialog(context, student),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border),
+          boxShadow: const <BoxShadow>[
+            BoxShadow(
+              color: Color(0x0D0F172A),
+              blurRadius: 16,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              student.name,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+            ),
+            if (studentId.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 6),
+              Text(
+                'ID: $studentId',
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ],
             const SizedBox(height: 6),
             Text(
-              'ID: $studentId',
+              'Batch: ${batchName.isEmpty ? '--' : batchName}',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Status: $status',
               style: const TextStyle(
                 color: AppColors.textSecondary,
                 fontSize: 12,
               ),
             ),
           ],
-          const SizedBox(height: 6),
-          Text(
-            'Batch: ${batchName.isEmpty ? '--' : batchName}',
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        ),
+      ),
+    );
+  }
+
+  Widget _detailRow({required String label, required String value}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            'Status: $status',
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          Expanded(
+            child: Text(
+              value.isEmpty ? '--' : value,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openAdminBatchDetailDialog(
+    BuildContext context,
+    BatchModel batch,
+  ) async {
+    final String teacherName = (batch.teacherName ?? '').trim();
+    final String scheduleLabel = _batchPatternLabel(batch);
+    final String studentsCount = '${batch.studentsCount ?? 0}';
+    final String status = (batch.status ?? '').trim().isEmpty
+        ? 'Active'
+        : (batch.status ?? '').trim();
+    await _showSaasDialog(
+      context: context,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _dialogHeader(
+            icon: Icons.class_rounded,
+            title: batch.name,
+            subtitle: 'Batch details',
+            accent: AppColors.accent,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _detailRow(label: 'Schedule', value: scheduleLabel),
+          _detailRow(label: 'Students', value: studentsCount),
+          _detailRow(
+            label: 'Teacher',
+            value: teacherName.isEmpty ? 'Unassigned' : teacherName,
+          ),
+          _detailRow(label: 'Status', value: status),
+          const SizedBox(height: AppSpacing.md),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              onPressed: _closeActiveDialog,
+              child: const Text('Close'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openAdminStudentDetailDialog(
+    BuildContext context,
+    StudentModel student,
+  ) async {
+    final String studentId = (student.studentId ?? '').trim();
+    final String email = (student.email ?? '').trim();
+    final String contact = (student.contactNo ?? '').trim();
+    final String parent = (student.parentContact ?? '').trim();
+    final String gender = (student.gender ?? '').trim();
+    final String batchName = (student.batchName ?? '').trim();
+    final String status = student.status.trim().isNotEmpty
+        ? student.status.trim()
+        : 'Active';
+    await _showSaasDialog(
+      context: context,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _dialogHeader(
+            icon: Icons.person_rounded,
+            title: student.name,
+            subtitle: 'Student details',
+            accent: AppColors.accent,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _detailRow(label: 'Student ID', value: studentId),
+          _detailRow(label: 'Batch', value: batchName),
+          _detailRow(label: 'Status', value: status),
+          _detailRow(label: 'Email', value: email),
+          _detailRow(label: 'Contact', value: contact),
+          _detailRow(label: 'Parent', value: parent),
+          _detailRow(label: 'Gender', value: gender),
+          const SizedBox(height: AppSpacing.md),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              onPressed: _closeActiveDialog,
+              child: const Text('Close'),
+            ),
           ),
         ],
       ),
