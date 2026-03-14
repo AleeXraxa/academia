@@ -2382,35 +2382,18 @@ extension _AttendanceViewAdminPart on AttendanceView {
             ),
           ),
         ),
-        bottomNavigationBar: FlashyTabBar(
-          selectedIndex: tabIndex,
-          showElevation: true,
-          onItemSelected: controller.updateMobileTab,
-          items: <FlashyTabBarItem>[
-            FlashyTabBarItem(
-              icon: const Icon(Icons.fact_check_rounded),
-              title: const Text('Sessions'),
-              activeColor: AppColors.accent,
-              inactiveColor: AppColors.textSecondary,
-            ),
-            FlashyTabBarItem(
-              icon: const Icon(Icons.history_rounded),
-              title: const Text('History'),
-              activeColor: AppColors.accent,
-              inactiveColor: AppColors.textSecondary,
-            ),
-            FlashyTabBarItem(
-              icon: const Icon(Icons.class_rounded),
-              title: const Text('Batches'),
-              activeColor: AppColors.accent,
-              inactiveColor: AppColors.textSecondary,
-            ),
-            FlashyTabBarItem(
-              icon: const Icon(Icons.people_alt_rounded),
-              title: const Text('Students'),
-              activeColor: AppColors.accent,
-              inactiveColor: AppColors.textSecondary,
-            ),
+        bottomNavigationBar: CurvedNavigationBar(
+          height: 58,
+          backgroundColor: AppColors.background,
+          color: AppColors.surface,
+          buttonBackgroundColor: AppColors.accent.withValues(alpha: 0.18),
+          index: tabIndex,
+          onTap: controller.updateMobileTab,
+          items: <Widget>[
+            Icon(Icons.fact_check_rounded, color: AppColors.textSecondary),
+            Icon(Icons.history_rounded, color: AppColors.textSecondary),
+            Icon(Icons.class_rounded, color: AppColors.textSecondary),
+            Icon(Icons.people_alt_rounded, color: AppColors.textSecondary),
           ],
         ),
       );

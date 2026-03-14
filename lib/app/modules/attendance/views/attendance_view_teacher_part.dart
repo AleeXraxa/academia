@@ -78,35 +78,18 @@ extension _AttendanceViewTeacherPart on AttendanceView {
             ],
           ),
         ),
-        bottomNavigationBar: FlashyTabBar(
-          selectedIndex: tabIndex,
-          showElevation: true,
-          onItemSelected: controller.updateMobileTab,
-          items: <FlashyTabBarItem>[
-            FlashyTabBarItem(
-              icon: const Icon(Icons.dashboard_rounded),
-              title: const Text('Dashboard'),
-              activeColor: AppColors.accent,
-              inactiveColor: AppColors.textSecondary,
-            ),
-            FlashyTabBarItem(
-              icon: const Icon(Icons.fact_check_rounded),
-              title: const Text('Attendance'),
-              activeColor: AppColors.accent,
-              inactiveColor: AppColors.textSecondary,
-            ),
-            FlashyTabBarItem(
-              icon: const Icon(Icons.history_rounded),
-              title: const Text('History'),
-              activeColor: AppColors.accent,
-              inactiveColor: AppColors.textSecondary,
-            ),
-            FlashyTabBarItem(
-              icon: const Icon(Icons.person_rounded),
-              title: const Text('Profile'),
-              activeColor: AppColors.accent,
-              inactiveColor: AppColors.textSecondary,
-            ),
+        bottomNavigationBar: CurvedNavigationBar(
+          height: 58,
+          backgroundColor: AppColors.background,
+          color: AppColors.surface,
+          buttonBackgroundColor: AppColors.accent.withValues(alpha: 0.18),
+          index: tabIndex,
+          onTap: controller.updateMobileTab,
+          items: <Widget>[
+            Icon(Icons.dashboard_rounded, color: AppColors.textSecondary),
+            Icon(Icons.fact_check_rounded, color: AppColors.textSecondary),
+            Icon(Icons.history_rounded, color: AppColors.textSecondary),
+            Icon(Icons.person_rounded, color: AppColors.textSecondary),
           ],
         ),
       );
@@ -2186,4 +2169,10 @@ extension _AttendanceViewTeacherPart on AttendanceView {
   }
 
 }
+
+
+
+
+
+
 

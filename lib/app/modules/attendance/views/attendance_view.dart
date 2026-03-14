@@ -12,7 +12,7 @@ import 'package:academia/app/widgets/layout/app_shell.dart';
 import 'package:academia/app/services/network_guard.dart';
 import 'package:academia/app/services/audit_log_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flashy_tab_bar2/flashy_tab_bar2.dart';
+import 'package:curved_navigation_bar/curved_navigation_bar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
