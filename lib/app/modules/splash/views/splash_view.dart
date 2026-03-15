@@ -89,6 +89,9 @@ class _SplashViewState extends State<SplashView>
       if (role == UserRole.cah ||
           role == UserRole.administrator ||
           role == UserRole.superAdmin) {
+        if (_isMobilePlatform()) {
+          return AppRoutes.attendance;
+        }
         return AppRoutes.dashboard;
       }
       return AppRoutes.login;
@@ -299,3 +302,6 @@ class _SplashViewState extends State<SplashView>
     );
   }
 }
+
+
+

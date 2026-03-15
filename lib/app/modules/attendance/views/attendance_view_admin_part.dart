@@ -2377,7 +2377,7 @@ extension _AttendanceViewAdminPart on AttendanceView {
                 _adminMobileSessionsTab(context, controller),
                 _adminMobileHistoryTab(context, controller),
                 _adminMobileBatchesTab(controller),
-                _adminMobileStudentsTab(),
+                _adminMobileStudentsTab(controller),
               ],
             ),
           ),
@@ -2601,47 +2601,103 @@ extension _AttendanceViewAdminPart on AttendanceView {
     );
   }
 
-  Widget _adminMobileStudentsTab() {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('students')
-          .orderBy('createdAt', descending: true)
-          .snapshots(),
-      builder:
-          (
-            BuildContext context,
-            AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
-          ) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final List<StudentModel> items =
-                snapshot.data?.docs
-                    .map(
-                      (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
-                          StudentModel.fromMap(id: doc.id, map: doc.data()),
-                    )
-                    .toList() ??
-                <StudentModel>[];
-            if (items.isEmpty) {
-              return const Center(
-                child: Text(
-                  'No students available.',
-                  style: TextStyle(color: AppColors.textSecondary),
-                ),
+  Widget _adminMobileStudentsTab(AttendanceController controller) {
+    return Obx(() {
+      final String query = controller.adminStudentAppliedSearch.value
+          .trim()
+          .toLowerCase();
+      return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('students')
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
+        builder:
+            (
+              BuildContext context,
+              AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>> snapshot,
+            ) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final List<StudentModel> items =
+                  snapshot.data?.docs
+                      .map(
+                        (QueryDocumentSnapshot<Map<String, dynamic>> doc) =>
+                            StudentModel.fromMap(id: doc.id, map: doc.data()),
+                      )
+                      .toList() ??
+                  <StudentModel>[];
+              final List<StudentModel> filtered = query.isEmpty
+                  ? items
+                  : items.where((StudentModel student) {
+                      final String name = student.name.toLowerCase();
+                      final String studentId = (student.studentId ?? '')
+                          .toLowerCase();
+                      final String batchName = (student.batchName ?? '')
+                          .toLowerCase();
+                      return name.contains(query) ||
+                          studentId.contains(query) ||
+                          batchName.contains(query);
+                    }).toList();
+              return Column(
+                children: <Widget>[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.md,
+                      AppSpacing.md,
+                      AppSpacing.md,
+                      AppSpacing.sm,
+                    ),
+                    child: Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: TextFormField(
+                            controller: controller.adminStudentSearchController,
+                            decoration: const InputDecoration(
+                              labelText: 'Search Students',
+                              hintText: 'Search by name, ID, or batch',
+                              prefixIcon: Icon(Icons.search_rounded),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        FilledButton.icon(
+                          onPressed: () {
+                            controller.adminStudentAppliedSearch.value =
+                                controller.adminStudentSearchController.text;
+                          },
+                          icon: const Icon(Icons.search_rounded, size: 18),
+                          label: const Text('Search'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No students found.',
+                              style: TextStyle(color: AppColors.textSecondary),
+                            ),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.all(AppSpacing.md),
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: AppSpacing.sm),
+                            itemBuilder: (BuildContext context, int index) {
+                              return _adminMobileStudentCard(
+                                context,
+                                filtered[index],
+                              );
+                            },
+                          ),
+                  ),
+                ],
               );
-            }
-            return ListView.separated(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              itemCount: items.length,
-              separatorBuilder: (_, __) =>
-                  const SizedBox(height: AppSpacing.sm),
-              itemBuilder: (BuildContext context, int index) {
-                return _adminMobileStudentCard(context, items[index]);
-              },
-            );
-          },
-    );
+            },
+      );
+    });
   }
 
   Widget _adminMobileStudentCard(BuildContext context, StudentModel student) {

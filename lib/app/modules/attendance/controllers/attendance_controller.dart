@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/material.dart';
 
 import 'package:academia/app/core/session/app_session.dart';
 import 'package:academia/app/data/models/batch_model.dart';
@@ -41,6 +42,8 @@ class AttendanceController extends GetxController {
   final RxString historyTeacherId = ''.obs;
   final RxString historyStatus = ''.obs;
   final RxString historySearch = ''.obs;
+  final RxString adminStudentAppliedSearch = ''.obs;
+  final TextEditingController adminStudentSearchController = TextEditingController();
   final RxList<String> selectedGenerationBatchIds = <String>[].obs;
   final RxMap<String, String> generationPresentByBatchId =
       <String, String>{}.obs;
@@ -1429,6 +1432,7 @@ class AttendanceController extends GetxController {
     _todaySubscription?.cancel();
     _historySubscription?.cancel();
     _settingsSubscription?.cancel();
+    adminStudentSearchController.dispose();
     super.onClose();
   }
 }
@@ -1769,3 +1773,4 @@ class QueuedTeacherSubmission {
   final DateTime queuedAt;
   final String notConductedReason;
 }
+
