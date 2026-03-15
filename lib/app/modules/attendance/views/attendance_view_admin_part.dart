@@ -2651,24 +2651,52 @@ extension _AttendanceViewAdminPart on AttendanceView {
                     child: Row(
                       children: <Widget>[
                         Expanded(
-                          child: TextFormField(
-                            controller: controller.adminStudentSearchController,
-                            decoration: const InputDecoration(
-                              labelText: 'Search Students',
-                              hintText: 'Search by name, ID, or batch',
-                              prefixIcon: Icon(Icons.search_rounded),
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              const Text(
+                                'Student Search',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                controller.adminStudentAppliedSearch.value
+                                        .trim()
+                                        .isEmpty
+                                    ? 'Tap search to filter students.'
+                                    : 'Filter: ${controller.adminStudentAppliedSearch.value}',
+                                style: const TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(width: 10),
                         FilledButton.icon(
-                          onPressed: () {
-                            controller.adminStudentAppliedSearch.value =
-                                controller.adminStudentSearchController.text;
-                          },
+                          onPressed: () => _openAdminStudentSearchDialog(
+                            context,
+                            controller,
+                          ),
                           icon: const Icon(Icons.search_rounded, size: 18),
                           label: const Text('Search'),
                         ),
+                        if (controller.adminStudentAppliedSearch.value
+                            .trim()
+                            .isNotEmpty) ...<Widget>[
+                          const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              controller.adminStudentAppliedSearch.value = '';
+                            },
+                            icon: const Icon(Icons.close_rounded, size: 16),
+                            label: const Text('Clear'),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -2698,6 +2726,160 @@ extension _AttendanceViewAdminPart on AttendanceView {
             },
       );
     });
+  }
+
+  Future<void> _openAdminStudentSearchDialog(
+    BuildContext context,
+    AttendanceController controller,
+  ) async {
+    final TextEditingController searchController = TextEditingController(
+      text: controller.adminStudentAppliedSearch.value,
+    );
+    await _showSaasDialog(
+      context: context,
+      child: StatefulBuilder(
+        builder:
+            (BuildContext context, void Function(void Function()) setState) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  _dialogHeader(
+                    icon: Icons.search_rounded,
+                    title: 'Search Students',
+                    subtitle: 'Find by name, ID, or batch',
+                    accent: AppColors.accent,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  TextField(
+                    controller: searchController,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      labelText: 'Search',
+                      prefixIcon: Icon(Icons.search_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 320),
+                    child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                      stream: FirebaseFirestore.instance
+                          .collection('students')
+                          .orderBy('createdAt', descending: true)
+                          .snapshots(),
+                      builder:
+                          (
+                            BuildContext context,
+                            AsyncSnapshot<QuerySnapshot<Map<String, dynamic>>>
+                            snapshot,
+                          ) {
+                            if (snapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
+                            }
+                            final String query = searchController.text
+                                .trim()
+                                .toLowerCase();
+                            final List<StudentModel> items =
+                                snapshot.data?.docs
+                                    .map(
+                                      (
+                                        QueryDocumentSnapshot<
+                                          Map<String, dynamic>
+                                        >
+                                        doc,
+                                      ) => StudentModel.fromMap(
+                                        id: doc.id,
+                                        map: doc.data(),
+                                      ),
+                                    )
+                                    .toList() ??
+                                <StudentModel>[];
+                            final List<StudentModel> filtered = query.isEmpty
+                                ? items
+                                : items.where((StudentModel student) {
+                                    final String name = student.name
+                                        .toLowerCase();
+                                    final String studentId =
+                                        (student.studentId ?? '').toLowerCase();
+                                    final String batchName =
+                                        (student.batchName ?? '').toLowerCase();
+                                    return name.contains(query) ||
+                                        studentId.contains(query) ||
+                                        batchName.contains(query);
+                                  }).toList();
+                            if (filtered.isEmpty) {
+                              return const Center(
+                                child: Text(
+                                  'No students found.',
+                                  style: TextStyle(
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              );
+                            }
+                            return ListView.separated(
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 6),
+                              itemBuilder: (BuildContext context, int index) {
+                                final StudentModel student = filtered[index];
+                                final String studentId =
+                                    (student.studentId ?? '').trim();
+                                final String batchName =
+                                    (student.batchName ?? '').trim();
+                                return ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
+                                  ),
+                                  leading: const CircleAvatar(
+                                    radius: 16,
+                                    backgroundColor: Color(0xFFE8EEFF),
+                                    child: Icon(
+                                      Icons.person_rounded,
+                                      size: 16,
+                                      color: AppColors.accent,
+                                    ),
+                                  ),
+                                  title: Text(student.name),
+                                  subtitle: Text(
+                                    [studentId, batchName]
+                                        .where(
+                                          (String value) => value.isNotEmpty,
+                                        )
+                                        .join(' � '),
+                                  ),
+                                  onTap: () {
+                                    controller.adminStudentAppliedSearch.value =
+                                        student.name;
+                                    Navigator.of(context).pop();
+                                  },
+                                );
+                              },
+                            );
+                          },
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton(
+                      onPressed: () {
+                        controller.adminStudentAppliedSearch.value =
+                            searchController.text;
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text('Apply Filter'),
+                    ),
+                  ),
+                ],
+              );
+            },
+      ),
+    );
   }
 
   Widget _adminMobileStudentCard(BuildContext context, StudentModel student) {
